@@ -1,0 +1,61 @@
+[project]
+name = "scholar"
+version = "0.1.0"
+description = "An autonomous research assistant for academic papers"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    # Core LangChain
+    "langchain>=0.3.0",
+    "langchain-core>=0.3.0",
+    "langchain-community>=0.3.0",
+    # LLM providers — free tier focused
+    "langchain-google-genai>=2.0.0",  # Gemini (free: 1500 req/day)
+    "langchain-groq>=0.2.0",          # Llama via Groq (free: 30 req/min) — optional alternative
+    # Agent orchestration (Phase 4)
+    "langgraph>=0.2.0",
+    # Vector store
+    "langchain-chroma>=0.1.4",
+    # PDF parsing
+    "pymupdf>=1.24.0",
+    "pymupdf4llm>=0.0.17",
+    # Paper APIs
+    "arxiv>=2.1.0",
+    "requests>=2.32.0",
+    # Utility
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "python-dotenv>=1.0.0",
+    "rich>=13.0.0",     # pretty terminal output
+    "typer>=0.12.0",    # building the CLI
+    "tiktoken>=0.7.0",  # token counting
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.6.0",
+    "mypy>=1.11",
+    "ipykernel>=6.0",
+]
+
+[project.scripts]
+scholar = "scholar.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/scholar"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
