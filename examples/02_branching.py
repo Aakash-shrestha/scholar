@@ -10,16 +10,17 @@ input. Teaches:
     - itemgetter: pluck values out of a dict
     - How to build non-linear data flows
 """
-from operator import itemgetter
 
-from scholar.config import settings  # noqa: F401
-from scholar.models import get_chat_model
+from operator import itemgetter
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableParallel, RunnablePassthrough
 from rich import print
 from rich.rule import Rule
+
+from scholar.config import settings  # noqa: F401
+from scholar.models import get_chat_model
 
 model = get_chat_model(temperature=0)
 
@@ -43,9 +44,7 @@ summarize = (
 )
 
 extract_claims = (
-    ChatPromptTemplate.from_template(
-        "List the key claims in this text as bullet points:\n\n{text}"
-    )
+    ChatPromptTemplate.from_template("List the key claims in this text as bullet points:\n\n{text}")
     | model
     | StrOutputParser()
 )

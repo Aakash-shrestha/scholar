@@ -12,15 +12,16 @@ This example teaches you:
       LangChain hides that difference from you)
     - Why this is one of the most useful features in LangChain
 """
-from typing import Literal
 
-from scholar.config import settings  # noqa: F401
-from scholar.models import get_chat_model
+from typing import Literal
 
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 from rich import print
 from rich.rule import Rule
+
+from scholar.config import settings  # noqa: F401
+from scholar.models import get_chat_model
 
 
 # ---------------------------------------------------------------------------
@@ -34,9 +35,7 @@ class PaperMetadata(BaseModel):
     main_contribution: str = Field(
         description="The single most important contribution, in one sentence"
     )
-    methods: list[str] = Field(
-        description="Technical methods or techniques used (max 5)"
-    )
+    methods: list[str] = Field(description="Technical methods or techniques used (max 5)")
     domain: Literal["nlp", "computer_vision", "rl", "theory", "other"] = Field(
         description="The primary research domain"
     )

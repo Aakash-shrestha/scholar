@@ -16,14 +16,14 @@ NOTE ON THE PROVIDER:
     models.py. Everything below would work unchanged. That portability is
     the central design promise of LangChain.
 """
-from scholar.config import settings  # noqa: F401 — loads env vars
-from scholar.models import get_chat_model
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from rich import print
 from rich.rule import Rule
 
+from scholar.config import settings  # noqa: F401 — loads env vars
+from scholar.models import get_chat_model
 
 # ---------------------------------------------------------------------------
 # 1. A chat model is a Runnable. Input: messages or a string. Output: AIMessage.
@@ -40,10 +40,15 @@ print(f"[dim]Just the text:[/dim] {response.content}\n")
 # ---------------------------------------------------------------------------
 # 2. A prompt template is a Runnable. Input: dict of vars. Output: messages.
 # ---------------------------------------------------------------------------
-prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are a precise technical explainer. Be concise."),
-    ("user", "Explain {topic} to someone with a {level} background. Max {sentences} sentences."),
-])
+prompt = ChatPromptTemplate.from_messages(
+    [
+        ("system", "You are a precise technical explainer. Be concise."),
+        (
+            "user",
+            "Explain {topic} to someone with a {level} background. Max {sentences} sentences.",
+        ),
+    ]
+)
 
 print(Rule("[bold cyan]2. Prompt templates produce messages[/bold cyan]"))
 messages = prompt.invoke({"topic": "attention mechanisms", "level": "CS undergrad", "sentences": 2})
@@ -75,11 +80,13 @@ print("[dim]Watch this print token by token:[/dim]")
 
 # Build a streaming-enabled version
 streaming_chain = prompt | get_chat_model(temperature=0, streaming=True) | StrOutputParser()
-for chunk in streaming_chain.stream({
-    "topic": "the curse of dimensionality",
-    "level": "CS undergrad",
-    "sentences": 3,
-}):
+for chunk in streaming_chain.stream(
+    {
+        "topic": "the curse of dimensionality",
+        "level": "CS undergrad",
+        "sentences": 3,
+    }
+):
     print(chunk, end="", flush=True)
 print("\n")
 
@@ -90,8 +97,6 @@ print("\n")
 # ---------------------------------------------------------------------------
 print(Rule("[bold cyan]5. Batching (parallel calls)[/bold cyan]"))
 topics = ["BERT", "GPT", "T5"]
-results = chain.batch([
-    {"topic": t, "level": "CS undergrad", "sentences": 1} for t in topics
-])
+results = chain.batch([{"topic": t, "level": "CS undergrad", "sentences": 1} for t in topics])
 for topic, result in zip(topics, results):
     print(f"[bold]{topic}:[/bold] {result}")
