@@ -23,10 +23,10 @@ messages = template.invoke(
     {
         "abstract": """We introduce a new family of generative models
 called diffusion models, which gradually denoise random noise to produce samples.
-We show that diffusion models
-achieve sample quality competitive with GANs on CIFAR-10 and ImageNet, while
-being significantly more stable to train. Our key insight is that the reverse
-diffusion process can be parameterized by a simple neural network trained with a denoising score-matching objective."""
+We show that diffusion models achieve sample quality competitive with GANs on CIFAR-10 and ImageNet,
+while being significantly more stable to train. Our key insight is that the reverse
+diffusion process can be parameterized by a simple neural network trained with a denoising
+score-matching objective."""
     }
 )
 
