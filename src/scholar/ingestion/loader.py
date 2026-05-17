@@ -1,4 +1,4 @@
-from zipfile._path import Path
+from pathlib import Path
 
 from langchain_core.documents import Document
 from langchain_pymupdf4llm import PyMuPDF4LLMLoader
@@ -16,8 +16,9 @@ def load_and_chunk(
     Returns:
         a list of chunked document object which contains page content and metadata is preserved
     """
-    loader = PyMuPDF4LLMLoader(pdf_path if type(pdf_path) is str else str(pdf_path))
+    loader = PyMuPDF4LLMLoader(pdf_path)
     docs = loader.load()
-    splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, overlap=overlap)
+
+    splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=overlap)
     chunks = splitter.split_documents(docs)
     return chunks

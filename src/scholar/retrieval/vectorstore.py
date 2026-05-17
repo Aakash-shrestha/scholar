@@ -1,5 +1,4 @@
-import os
-from zipfile import Path
+from pathlib import Path
 
 from langchain_chroma.vectorstores import Chroma
 from langchain_core.documents.base import Document
@@ -13,23 +12,25 @@ def get_embeddings() -> Embeddings:
     return embeddings
 
 
-def build_or_load_vectorstore(
-    chunks: list[Document], persistent_dir: str | Path, embeddings: Embeddings
+def load_existing_vectorstore(persist_dir: Path, embeddings: Embeddings) -> Chroma | None:
+    """returns existing store if it exists, or None if it does not"""
+    if not persist_dir.exists():
+        return None
+    return Chroma(persist_directory=str(persist_dir), embedding_function=embeddings)
+
+
+def build_vectorstore(
+    chunks: list[Document], persist_dir: str | Path, embeddings: Embeddings
 ) -> Chroma:
-    """Create a Chroma vectorstore from chunks and embedding instance in a persistent_dir
+    """Create a new Chroma vectorstore from chunks and embedding instance in a persistent_dir
     Args:
         chunks: a list of chunked documents
         persistent_dir: path to persistent storage, where vectorstore are stored
         embeddings: insatnce of Huggingface embedding
     Returns:
-        a chroma vector database instance, which is either created from the chunks or loaded from
-        persistent_dir if it already exists
+        a chroma vector database instance, which is either created from the chunks
     """
 
-    if not os.path.exists(persistent_dir if persistent_dir is str else str(persistent_dir)):
-        vectorstore = Chroma.from_documents(
-            documents=chunks, persistent_directory=persistent_dir, embedding=embeddings
-        )
-    else:
-        vectorstore = Chroma(persist_directory=str(persistent_dir), embedding_function=embeddings)
-    return vectorstore
+    return Chroma.from_documents(
+        documents=chunks, embedding=embeddings, persist_directory=str(persist_dir)
+    )

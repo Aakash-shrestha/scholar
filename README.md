@@ -78,7 +78,7 @@ uv run python examples/03_structured_output.py
 
 ## Roadmap
 
-- [x] Phase 1 — Foundations & first working RAG
+- [x] Phase 1 — Foundations & first working RAG (May 17)
 - [ ] Phase 2 — Robust paper ingestion (arXiv, citation extraction)
 - [ ] Phase 3 — Advanced retrieval (hybrid, re-ranking, eval suite)
 - [ ] Phase 4 — Multi-agent LangGraph system
