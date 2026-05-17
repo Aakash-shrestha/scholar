@@ -13,7 +13,6 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_pymupdf4llm import PyMuPDF4LLMLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from rich import print
-from rich.rule import Rule
 
 load_dotenv()
 
