@@ -45,18 +45,23 @@ def ask(question: str, paper: Path = typer.Option(Path("data/papers/attention.pd
 
 @app.command()
 def ingest(source: str):
+    """Ingest a paper from a source (currently only arXiv is supported). This will fetch the paper's
+    metadata, download the PDF, chunk it, enrich the chunks with metadata, and store the chunks in a
+    persistent vectorstore for retrieval."""
     arxiv_id = re.sub(r"^arxiv:", "", source, flags=re.IGNORECASE)
     paper_metadata = fetch_arxiv_metadata(arxiv_id)
     paper_path = download_paper(paper_metadata)
 
     chunks = load_and_chunk(paper_path)
+    print("chunks: ", chunks)
     enriched_chunks = enrich_chunks(chunks, paper_metadata)
-    persistent_dir = Path("data/chroma") / paper_metadata.arxiv_id
+    print("enriched_chunks: ", enriched_chunks)
+    persistent_dir = Path("data/chroma") / re.sub(
+        r"v\d+$", "", paper_metadata.arxiv_id
+    )  # remove v1
     embeddings = get_embeddings()
     build_vectorstore(enriched_chunks, persistent_dir, embeddings)
-    print("vector store created successfully!")
-    print(
-        f"""title: {enriched_chunks[0].metadata["title"]} short_citation: {
-            enriched_chunks[0].metadata["short_citation"]
-        }"""
-    )
+    print(Rule(f"[bold green]Ingested {paper_metadata.arxiv_id}[/bold green]"))
+    print(f"Title: {paper_metadata.title}")
+    print(f"Citation: {paper_metadata.short_citation}")
+    print(f"Stored at: {persistent_dir}")

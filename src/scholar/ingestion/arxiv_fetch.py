@@ -2,6 +2,7 @@ from pathlib import Path
 from textwrap import dedent
 
 import arxiv
+import regex as re
 import requests
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
@@ -28,7 +29,7 @@ class ArxivMetadata(BaseModel):
             return f"{last_names[0]} and {last_names[1]} {self.year}"
         return f"{last_names[0]} et al. {self.year}"
 
-    pdf_url: str | None = Field(description="Url of the pdf of the research paper")
+    pdf_url: str = Field(description="Url of the pdf of the research paper")
 
 
 def fetch_arxiv_metadata(arxiv_id: str) -> ArxivMetadata:
@@ -37,13 +38,15 @@ def fetch_arxiv_metadata(arxiv_id: str) -> ArxivMetadata:
         raise ValueError("arxiv_id must be a non-empty string")
     search = arxiv.Search(id_list=[arxiv_id])
     paper = next(arxiv.Client(delay_seconds=5, num_retries=5).results(search))
+    raw_arxiv_id = paper.get_short_id()
+    arxiv_id = re.sub(r"v\d+$", "", raw_arxiv_id)
     return ArxivMetadata(
-        arxiv_id=paper.get_short_id(),
+        arxiv_id=arxiv_id,
         title=paper.title,
         authors=[a.name for a in paper.authors],
         abstract=paper.summary,
         year=paper.published.year,
-        pdf_url=paper.pdf_url,
+        pdf_url=str(paper.pdf_url),
     )
 
 
@@ -54,7 +57,7 @@ def download_paper(metadata: ArxivMetadata, paper_dir: Path = Path("data/papers"
     pdf_path = paper_dir / f"{metadata.arxiv_id}.pdf"
     if pdf_path.exists():
         return pdf_path
-    response = requests.get(metadata.pdf_url, timeout=30)
+    response = requests.get(str(metadata.pdf_url), timeout=30)
     response.raise_for_status()
     pdf_path.write_bytes(response.content)
     return Path(pdf_path)
