@@ -2,6 +2,7 @@ from pathlib import Path
 from textwrap import dedent
 
 import arxiv
+import requests
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
 from pydantic.fields import computed_field
@@ -15,14 +16,18 @@ class ArxivMetadata(BaseModel):
         description=dedent("""Abstract of the research paper that summarizes
         the entire paper""")
     )
+    year: int = Field(description="Year the research paper was published")
 
     @computed_field(description="short citation of the research paper, last name + et al. + year")
     @property
     def short_citation(self) -> str:
-        last_name = self.authors[0].split()[-1]
-        return f"{last_name} et al. {self.year}"
+        last_names = [a.split()[-1] for a in self.authors]
+        if len(last_names) == 1:
+            return f"{last_names[0]} {self.year}"
+        elif len(last_names) == 2:
+            return f"{last_names[0]} and {last_names[1]} {self.year}"
+        return f"{last_names[0]} et al. {self.year}"
 
-    year: int = Field(description="Year the research paper was published")
     pdf_url: str | None = Field(description="Url of the pdf of the research paper")
 
 
@@ -49,9 +54,9 @@ def download_paper(metadata: ArxivMetadata, paper_dir: Path = Path("data/papers"
     pdf_path = paper_dir / f"{metadata.arxiv_id}.pdf"
     if pdf_path.exists():
         return pdf_path
-    search = arxiv.Search(id_list=[metadata.arxiv_id])
-    paper = next(arxiv.Client(delay_seconds=5, num_retries=5).results(search))
-    paper.download_pdf(dirpath=str(paper_dir), filename=f"{metadata.arxiv_id}.pdf")
+    response = requests.get(metadata.pdf_url, timeout=30)
+    response.raise_for_status()
+    pdf_path.write_bytes(response.content)
     return Path(pdf_path)
 
 
