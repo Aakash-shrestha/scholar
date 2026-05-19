@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+import datetime
 from pathlib import Path
 
 from sqlalchemy.engine import Engine, create_engine
@@ -22,7 +22,9 @@ class Paper(Base):
     abstract: Mapped[str]
     pdf_path: Mapped[str]  # relative path like data/papers/1706.01392
     persist_dir: Mapped[str]  # relative path like data/chroma/..
-    ingested_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
+    ingested_at: Mapped[datetime.datetime] = mapped_column(
+        default=lambda: datetime.datetime.now(datetime.UTC)
+    )
 
 
 def get_engine(db_path: Path = Path("data/scholar.db")) -> Engine:
