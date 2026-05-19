@@ -53,9 +53,7 @@ def ingest(source: str):
     paper_path = download_paper(paper_metadata)
 
     chunks = load_and_chunk(paper_path)
-    print("chunks: ", chunks)
     enriched_chunks = enrich_chunks(chunks, paper_metadata)
-    print("enriched_chunks: ", enriched_chunks)
     persistent_dir = Path("data/chroma") / re.sub(
         r"v\d+$", "", paper_metadata.arxiv_id
     )  # remove v1

@@ -8,17 +8,26 @@ from langchain_core.runnables.passthrough import RunnablePassthrough
 
 
 def format_docs(docs: list[Document]) -> str:
-    """takes the list of documents from retriever and adds metadata to pagecontent of the chunks"""
+    """takes the list of documents from retriever and adds metadata to pagecontent of the chunks
+    args: docs: list of documents returned by retriever, each document has page_content and metadata
+    with short_citation and page number as keys.
+    returns:
+    a string with page content and metadata formatted as [short_citation, p{page number}]
+    page_content
+    """
     block = []
     for doc in docs:
         citation = doc.metadata.get("short_citation", "unknown")
         page = doc.metadata.get("page", "?")
-        block.append(f"[{citation}, p{page + 1}]\n{doc.page_content}")
+        page_label = f"p.{page + 1}" if isinstance(page, int) else "p.?"
+        block.append(f"[{citation}, p{page_label}]\n{doc.page_content}")
     return "\n\n--\n\n".join(block)
 
 
 def build_rag_chain(retriever, model) -> Runnable:
-    """Return a Runnable that takes a question string and returns an answer string."""
+    """Return a Runnable that takes a question string and returns an answer string. The chain
+    retrieves relevant chunks from the retriever, formats them with citations, and then prompts the
+    model to answer the question based on the retrieved context."""
     prompt = ChatPromptTemplate.from_template(
         dedent("""
     You are an expert research assistant. You need to answer the query based on the given context
