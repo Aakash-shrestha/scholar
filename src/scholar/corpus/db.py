@@ -7,8 +7,8 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 class Base(DeclarativeBase):  # declarative base is a parent class that tells anything that inherits
     # me is a sql table
-    pass  # pass means this class is left intentionally empty, only purpose is so that other subclass
-    # can inherit from this parent base class
+    pass  # pass means this class is left intentionally empty,only purpose is so that other
+    # subclass can inherit from this parent base class
 
 
 class Paper(Base):

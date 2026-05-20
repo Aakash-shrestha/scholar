@@ -2,7 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm.session import Session
 
-from scholar.corpus.db import Paper, get_engine
+from scholar.corpus.db import Paper
 
 
 class CorpusRepository:

@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 from textwrap import dedent
 
@@ -36,10 +37,25 @@ def fetch_arxiv_metadata(arxiv_id: str) -> ArxivMetadata:
     """Fetch a paper's metadata from arXiv given its ID."""
     if not isinstance(arxiv_id, str) or not arxiv_id.strip():
         raise ValueError("arxiv_id must be a non-empty string")
-    search = arxiv.Search(id_list=[arxiv_id])
-    paper = next(arxiv.Client(delay_seconds=5, num_retries=5).results(search))
+    search = arxiv.Search(id_list=[arxiv_id], max_results=1)
+    client = arxiv.Client(delay_seconds=3, num_retries=0, page_size=1)
+    last_error: Exception | None = None
+    paper = None
+    for attempt in range(1, 6):
+        try:
+            paper = next(client.results(search))
+            break
+        except arxiv.HTTPError as exc:
+            last_error = exc
+            if getattr(exc, "status_code", None) != 429 and "429" not in str(exc):
+                raise
+            time.sleep(2**attempt)
+    if paper is None:
+        raise last_error if last_error else RuntimeError("Failed to fetch arXiv metadata")
+
     raw_arxiv_id = paper.get_short_id()
     arxiv_id = re.sub(r"v\d+$", "", raw_arxiv_id)
+
     return ArxivMetadata(
         arxiv_id=arxiv_id,
         title=paper.title,
@@ -52,7 +68,9 @@ def fetch_arxiv_metadata(arxiv_id: str) -> ArxivMetadata:
 
 def download_paper(metadata: ArxivMetadata, paper_dir: Path = Path("data/papers")) -> Path:
     """
-    Download the paper's PDF from arXiv and save it to disk. Returns the path to the downloaded PDF."""
+    Download the paper's PDF from arXiv and save it to disk. Returns the path to the downloaded PDF.
+    """
+
     paper_dir.mkdir(parents=True, exist_ok=True)
     pdf_path = paper_dir / f"{metadata.arxiv_id}.pdf"
     if pdf_path.exists():
@@ -65,6 +83,7 @@ def download_paper(metadata: ArxivMetadata, paper_dir: Path = Path("data/papers"
 
 def enrich_chunks(chunks: list[Document], metadata: ArxivMetadata) -> list[Document]:
     """Add paper-level metadata to each chunk's metadata dict."""
+
     for chunk in chunks:  # since chunk.metadata is mutable, it can be updated in plcace
         chunk.metadata["arxiv_id"] = metadata.arxiv_id
         chunk.metadata["title"] = metadata.title
