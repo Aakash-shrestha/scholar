@@ -26,7 +26,7 @@ load_dotenv()
 
 @app.command()
 def ask(
-    question: str, paper: Path = typer.Option(Path("data/papers/attention.pdf"), "--paper")
+    question: str, paper: Path = typer.Option(Path("data/papers/1706.03762.pdf"), "--paper")
 ) -> None:
     """Ask a question about a paper. Retrieves relevant context and answers with citations."""
     if not paper.exists():
