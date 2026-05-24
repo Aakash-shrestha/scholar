@@ -1,3 +1,4 @@
+import datetime
 import re
 from pathlib import Path
 
@@ -11,6 +12,8 @@ from rich.table import Table
 
 from scholar.corpus.db import Paper, get_engine, init_db
 from scholar.corpus.repository import CorpusRepository
+from scholar.evaluation.runner import run_eval
+from scholar.evaluation.schema import load_questions
 from scholar.ingestion.arxiv_fetch import download_paper, enrich_chunks, fetch_arxiv_metadata
 from scholar.ingestion.loader import load_and_chunk
 from scholar.retrieval.rag import build_rag_chain
@@ -33,7 +36,7 @@ def ask(
         typer.echo(f"Error: paper not found: {paper}", err=True)
         raise typer.Exit(code=1)
 
-    persistent_dir = Path("data/chroma") / paper.stem
+    persistent_dir = Path("data/chroma") / paper.stem  # .stem gives file name without ext
     embeddings = get_embeddings()
     vectorstore = load_existing_vectorstore(persistent_dir, embeddings)
     if vectorstore is None:
@@ -114,4 +117,39 @@ def list_papers() -> None:
         table.add_row(paper.arxiv_id, paper.title, paper.short_citation, str(paper.year))
 
     console = Console()
+    console.print(table)
+
+
+@app.command(name="eval")
+def run_eval_cmd(
+    question_path: Path = typer.Option(Path("evaluation/questions.jsonl"), "--questions"),
+    config: str = typer.Option("baseline", "--config"),
+    output_dir: Path = typer.Option(Path("evaluation/runs/"), "--output-dir"),
+) -> None:
+    """Run all eval questions and save results."""
+    questions_list = load_questions(question_path)
+    timestamp = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+    output_path = output_dir / f"{config}_{timestamp}.jsonl"
+    evaluation_result = run_eval(questions_list, config, output_path)
+
+    console = Console()
+    # summary table
+    total_questions = len(questions_list)
+    answered = len(evaluation_result)
+    skipped = total_questions - answered
+    avg_latency = int(sum(r.latency_ms for r in evaluation_result) / answered) if answered else 0
+    total_latency_s = sum(r.latency_ms for r in evaluation_result) / 1000
+
+    table = Table(title="Eval Run Summary", show_header=True, header_style="bold cyan")
+    table.add_column("Metric", style="bold")
+    table.add_column("Value")
+
+    table.add_row("Config", config)
+    table.add_row("Total questions", str(total_questions))
+    table.add_row("Answered", f"[green]{answered}[/green]")
+    table.add_row("Skipped (not indexed)", f"[yellow]{skipped}[/yellow]")
+    table.add_row("Avg latency", f"{avg_latency} ms")
+    table.add_row("Total time", f"{total_latency_s:.1f} s")
+    table.add_row("Output", str(output_path))
+
     console.print(table)
