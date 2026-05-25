@@ -164,7 +164,7 @@ def judge(
     ),
 ) -> None:
     eval_runs = load_eval_runs(run_file)
-    model = get_chat_model()
+    model = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
     questions = load_questions(Path("evaluation/questions.jsonl"))
     model_name = model.model_name
 

@@ -129,8 +129,13 @@ def run_judge(
     """
     Run the judge function on a list of eval_runs and questions, saving results to output_path.
     """
+    question_by_id = {q.id: q for q in questions}
     scores = []
-    for eval_run, question in zip(eval_runs, questions):
+    for eval_run in eval_runs:
+        question = question_by_id.get(eval_run.question_id)
+        if question is None:
+            print(f"[{eval_run.question_id}] no matching question, skipping")
+            continue
         score: Score = judge_one(eval_run, question, model, model_name)
         scores.append(score)
 
