@@ -10,6 +10,7 @@ This is the practical payoff of LangChain's abstraction layer:
     - In Phase 6, you might swap to Claude/GPT-4 for production
     - Nothing else in the codebase changes
 """
+
 from __future__ import annotations
 
 from langchain_core.embeddings import Embeddings

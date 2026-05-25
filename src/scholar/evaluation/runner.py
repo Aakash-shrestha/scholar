@@ -1,8 +1,9 @@
 import datetime
+import json
 import time
 from pathlib import Path
 
-from langchain_google_genai import ChatGoogleGenerativeAI
+import pydantic
 from langchain_groq.chat_models import ChatGroq
 from pydantic import BaseModel
 
@@ -116,3 +117,20 @@ def run_eval(
             f.write(run.model_dump_json() + "\n")
 
     return eval_run_result
+
+
+def load_eval_runs(path: Path) -> list[EvalRun]:
+    """
+    Load eval runs from a JSONL file at the given path.
+    """
+    eval_runs: list[EvalRun] = []
+    with path.open() as f:
+        for line_no, raw in enumerate(f, start=1):
+            if not raw.strip():
+                continue
+            data = json.loads(raw)
+            try:
+                eval_runs.append(EvalRun(**data))
+            except pydantic.ValidationError as e:
+                raise ValueError(f"Invalid run at line {line_no}: {e}") from e
+    return eval_runs

@@ -5,14 +5,15 @@ from pathlib import Path
 import typer
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
-from rich import print
+from rich import box, print
 from rich.console import Console
 from rich.rule import Rule
 from rich.table import Table
 
 from scholar.corpus.db import Paper, get_engine, init_db
 from scholar.corpus.repository import CorpusRepository
-from scholar.evaluation.runner import run_eval
+from scholar.evaluation.judge import run_judge
+from scholar.evaluation.runner import load_eval_runs, run_eval
 from scholar.evaluation.schema import load_questions
 from scholar.ingestion.arxiv_fetch import download_paper, enrich_chunks, fetch_arxiv_metadata
 from scholar.ingestion.loader import load_and_chunk
@@ -153,3 +154,61 @@ def run_eval_cmd(
     table.add_row("Output", str(output_path))
 
     console.print(table)
+
+
+@app.command(name="judge")
+def judge(
+    run_file: Path = typer.Option(
+        Path("evaluation/runs/baseline_2026-05-21 16:52:49.925143.jsonl"), "--run-file"
+    ),
+) -> None:
+    eval_runs = load_eval_runs(run_file)
+    model = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
+    questions = load_questions(Path("evaluation/questions.jsonl"))
+    model_name = model.model_name
+
+    scores_dir = Path("evaluation/scores")
+    scores_dir.mkdir(parents=True, exist_ok=True)
+    scores_path = scores_dir / f"{run_file.stem}-scores.jsonl"
+
+    scores = run_judge(eval_runs, questions, model, scores_path, model_name)
+
+    count = len(scores)
+    mean_faith = sum(s.faithfulness for s in scores) / count if count else 0.0
+    mean_help = sum(s.helpfulness for s in scores) / count if count else 0.0
+
+    def _score_style(val: float) -> str:
+        if val >= 4.0:
+            return "bold green"
+        elif val >= 3.0:
+            return "bold yellow"
+        return "bold red"
+
+    console = Console()
+    console.print()
+    console.print(Rule("[bold magenta] ✦  Judge Results  ✦ [/bold magenta]", style="magenta"))
+    console.print()
+
+    table = Table(
+        show_header=True,
+        header_style="bold cyan",
+        box=box.ROUNDED,
+        border_style="bright_black",
+        padding=(0, 2),
+    )
+    table.add_column("Metric", style="bold white", min_width=22)
+    table.add_column("Value", justify="center", min_width=16)
+
+    table.add_row("Runs scored", f"[bold white]{count}[/bold white]")
+    table.add_row(
+        "Mean faithfulness",
+        f"[{_score_style(mean_faith)}]{mean_faith:.2f} / 5.00[/{_score_style(mean_faith)}]",
+    )
+    table.add_row(
+        "Mean helpfulness",
+        f"[{_score_style(mean_help)}]{mean_help:.2f} / 5.00[/{_score_style(mean_help)}]",
+    )
+
+    console.print(table)
+    console.print()
+    console.print(Rule(style="bright_black"))
