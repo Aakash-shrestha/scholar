@@ -16,6 +16,7 @@ from __future__ import annotations
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+from langchain_groq.chat_models import ChatGroq
 
 from scholar.config import settings
 
@@ -35,11 +36,9 @@ def get_chat_model(
         streaming: Whether to stream tokens. Off by default for simplicity.
     """
     model_name = settings.chat_model_pro if pro else settings.chat_model
-    return ChatGoogleGenerativeAI(
+    return ChatGroq(
         model=model_name,
         temperature=temperature,
-        google_api_key=settings.google_api_key,
-        # disable_streaming inverts the boolean for the SDK
         disable_streaming=not streaming,
     )
 

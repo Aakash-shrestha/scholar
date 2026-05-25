@@ -39,14 +39,9 @@ class Settings(BaseSettings):
     langsmith_api_key: str | None = Field(default=None, alias="LANGSMITH_API_KEY")
     langsmith_project: str = Field(default="scholar-dev", alias="LANGSMITH_PROJECT")
 
-    # Models — centralized so we can change them in one place.
-    # Gemini 2.5 Flash is the free-tier workhorse: frontier-class quality,
-    # 1M context, generous daily quota. We use Pro only for the synthesis
-    # agent later, when we need maximum reasoning quality.
-    chat_model: str = "gemini-2.5-flash-lite"
-    chat_model_pro: str = "gemini-2.5-pro"  # used sparingly, slower
+    chat_model: str = "llama-3.1-8b-instant"
+    chat_model_pro: str = "llama-3.3-70b-versatile"
 
-    # Embeddings — Gemini's embedding model, also free
     embedding_model: str = "models/text-embedding-004"
     embedding_dimensions: int = 768
 

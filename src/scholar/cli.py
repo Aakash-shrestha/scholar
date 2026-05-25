@@ -17,6 +17,7 @@ from scholar.evaluation.runner import load_eval_runs, run_eval
 from scholar.evaluation.schema import load_questions
 from scholar.ingestion.arxiv_fetch import download_paper, enrich_chunks, fetch_arxiv_metadata
 from scholar.ingestion.loader import load_and_chunk
+from scholar.models import get_chat_model
 from scholar.retrieval.rag import build_rag_chain
 from scholar.retrieval.vectorstore import (
     build_vectorstore,
@@ -163,7 +164,7 @@ def judge(
     ),
 ) -> None:
     eval_runs = load_eval_runs(run_file)
-    model = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
+    model = get_chat_model()
     questions = load_questions(Path("evaluation/questions.jsonl"))
     model_name = model.model_name
 
