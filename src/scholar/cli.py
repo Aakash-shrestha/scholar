@@ -12,12 +12,12 @@ from rich.table import Table
 
 from scholar.corpus.db import Paper, get_engine, init_db
 from scholar.corpus.repository import CorpusRepository
-from scholar.evaluation.judge import run_judge
+from scholar.evaluation.judge import Score, run_judge
+from scholar.evaluation.report import ComparisonReport, compute_summary, render_markdown
 from scholar.evaluation.runner import load_eval_runs, run_eval
 from scholar.evaluation.schema import load_questions
 from scholar.ingestion.arxiv_fetch import download_paper, enrich_chunks, fetch_arxiv_metadata
 from scholar.ingestion.loader import load_and_chunk
-from scholar.models import get_chat_model
 from scholar.retrieval.rag import build_rag_chain
 from scholar.retrieval.vectorstore import (
     build_vectorstore,
@@ -213,3 +213,46 @@ def judge(
     console.print(table)
     console.print()
     console.print(Rule(style="bright_black"))
+
+
+@app.command(name="report")
+def report(
+    scores: list[Path] = typer.Option(
+        ...,  # required field
+        "--scores",
+        help="One or more score JSONL files",
+    ),
+    output: Path = typer.Option(
+        Path("evaluation/report.md"),
+        "--output",
+    ),
+) -> None:
+    """Generate a comparison report from  one or more score files."""
+    all_scores: list[Score] = []
+    for score_path in scores:
+        with open(score_path) as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    all_scores.append(Score.model_validate_json(line))
+
+    if not all_scores:
+        typer.echo("No scores found in provided files.", err=True)
+        raise typer.Exit(code=1)
+
+    configs_by_name: dict[str, list[Score]] = {}
+    for s in all_scores:
+        configs_by_name.setdefault(s.config_name, []).append(s)
+
+    summaries = [compute_summary(group) for group in configs_by_name.values()]
+
+    report_obj = ComparisonReport(
+        generated_at=datetime.datetime.now(),
+        configs=summaries,
+        total_questions=max(len(g) for g in configs_by_name.values()),
+    )
+
+    markdown = render_markdown(report_obj)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(markdown)
+    typer.echo(f"Report written to {output}")
