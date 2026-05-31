@@ -17,12 +17,14 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_groq.chat_models import ChatGroq
+from pydantic import SecretStr
 
 from scholar.config import settings
 
 
 def get_chat_model(
     *,
+    provider: str = "groq",
     pro: bool = False,
     temperature: float = 0.0,
     streaming: bool = False,
@@ -30,17 +32,26 @@ def get_chat_model(
     """Build a chat model.
 
     Args:
+        provider: "groq" for Llama via Groq, "gemini" for Google Gemini.
         pro: Use the larger, slower Pro model. Reserve for synthesis steps
             where reasoning quality matters more than latency.
         temperature: 0.0 for deterministic factual tasks; ~0.7 for creative.
         streaming: Whether to stream tokens. Off by default for simplicity.
     """
-    model_name = settings.chat_model_pro if pro else settings.chat_model
-    return ChatGroq(
-        model=model_name,
-        temperature=temperature,
-        disable_streaming=not streaming,
-    )
+    if provider == "groq":
+        model_name = settings.groq_model_pro if pro else settings.groq_model
+        return ChatGroq(
+            model=model_name,
+            temperature=temperature,
+            disable_streaming=not streaming,
+        )
+    else:
+        model_name = settings.gemini_model_pro if pro else settings.gemini_model
+        return ChatGoogleGenerativeAI(
+            model=model_name,
+            temperature=temperature,
+            disable_streaming=not streaming,
+        )
 
 
 def get_embeddings() -> Embeddings:
@@ -53,5 +64,5 @@ def get_embeddings() -> Embeddings:
     """
     return GoogleGenerativeAIEmbeddings(
         model=settings.embedding_model,
-        google_api_key=settings.google_api_key,
+        api_key=SecretStr(settings.google_api_key),
     )

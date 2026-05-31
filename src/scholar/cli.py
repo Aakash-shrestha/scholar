@@ -4,7 +4,6 @@ from pathlib import Path
 
 import typer
 from dotenv import load_dotenv
-from langchain_groq import ChatGroq
 from rich import box, print
 from rich.console import Console
 from rich.rule import Rule
@@ -18,6 +17,8 @@ from scholar.evaluation.runner import load_eval_runs, run_eval
 from scholar.evaluation.schema import load_questions
 from scholar.ingestion.arxiv_fetch import download_paper, enrich_chunks, fetch_arxiv_metadata
 from scholar.ingestion.loader import load_and_chunk
+from scholar.models import get_chat_model
+from scholar.retrieval.config import RetrieverConfig
 from scholar.retrieval.rag import build_rag_chain
 from scholar.retrieval.vectorstore import (
     build_vectorstore,
@@ -46,7 +47,7 @@ def ask(
         vectorstore = build_vectorstore(chunks, persistent_dir, embeddings)
 
     retriever = vectorstore.as_retriever(search_kwargs={"k": 8})
-    model = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
+    model = get_chat_model()
 
     rag_chain = build_rag_chain(retriever, model)
     response = rag_chain.invoke(question)
@@ -122,16 +123,32 @@ def list_papers() -> None:
     console.print(table)
 
 
+PREDEFINED_CONFIGS = {
+    "baseline": RetrieverConfig(
+        name="baseline",
+        kind="semantic",
+        k=8,
+    ),
+    "hybrid": RetrieverConfig(name="hybrid", kind="hybrid", weight=[0.5, 0.5]),
+}
+
+
 @app.command(name="eval")
 def run_eval_cmd(
     question_path: Path = typer.Option(Path("evaluation/questions.jsonl"), "--questions"),
-    config: str = typer.Option("baseline", "--config"),
+    config_name: str = typer.Option("baseline", "--config"),
     output_dir: Path = typer.Option(Path("evaluation/runs/"), "--output-dir"),
 ) -> None:
     """Run all eval questions and save results."""
+    if config_name not in PREDEFINED_CONFIGS:
+        typer.echo(f"""Error: unknown config '{config_name}'. Valid options:
+            {list(PREDEFINED_CONFIGS.keys())}""")
+        raise typer.Exit(code=1)
+
+    config = PREDEFINED_CONFIGS[config_name]
     questions_list = load_questions(question_path)
     timestamp = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
-    output_path = output_dir / f"{config}_{timestamp}.jsonl"
+    output_path = output_dir / f"{config.name}_{timestamp}.jsonl"
     evaluation_result = run_eval(questions_list, config, output_path)
 
     console = Console()
@@ -146,7 +163,7 @@ def run_eval_cmd(
     table.add_column("Metric", style="bold")
     table.add_column("Value")
 
-    table.add_row("Config", config)
+    table.add_row("Config", config.name)
     table.add_row("Total questions", str(total_questions))
     table.add_row("Answered", f"[green]{answered}[/green]")
     table.add_row("Skipped (not indexed)", f"[yellow]{skipped}[/yellow]")
@@ -164,9 +181,9 @@ def judge(
     ),
 ) -> None:
     eval_runs = load_eval_runs(run_file)
-    model = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
+    model = get_chat_model(pro=True)
     questions = load_questions(Path("evaluation/questions.jsonl"))
-    model_name = model.model_name
+    model_name = getattr(model, "model", "ai chat model")
 
     scores_dir = Path("evaluation/scores")
     scores_dir.mkdir(parents=True, exist_ok=True)

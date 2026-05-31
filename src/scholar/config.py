@@ -39,8 +39,13 @@ class Settings(BaseSettings):
     langsmith_api_key: str | None = Field(default=None, alias="LANGSMITH_API_KEY")
     langsmith_project: str = Field(default="scholar-dev", alias="LANGSMITH_PROJECT")
 
-    chat_model: str = "llama-3.1-8b-instant"
-    chat_model_pro: str = "llama-3.3-70b-versatile"
+    # Gemini models
+    gemini_model: str = "gemini-2.5-flash-lite"
+    gemini_model_pro: str = "gemini-2.5-pro"
+
+    # Groq/Llama models
+    groq_model: str = "llama-3.1-8b-instant"
+    groq_model_pro: str = "llama-3.3-70b-versatile"
 
     embedding_model: str = "models/text-embedding-004"
     embedding_dimensions: int = 768
@@ -57,7 +62,7 @@ class Settings(BaseSettings):
         return self.data_dir / "chroma"
 
 
-settings = Settings()  # type: ignore[call-arg]
+settings = Settings()
 
 # Ensure data directories exist
 settings.papers_dir.mkdir(parents=True, exist_ok=True)

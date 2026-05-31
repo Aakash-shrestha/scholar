@@ -4,10 +4,13 @@ import time
 from pathlib import Path
 
 import pydantic
-from langchain_groq.chat_models import ChatGroq
+from langchain_chroma import Chroma
+from langchain_core.documents import Document
 from pydantic import BaseModel
 
 from scholar.evaluation.schema import EvalQuestion
+from scholar.models import get_chat_model
+from scholar.retrieval.config import RetrieverConfig, build_retriever
 from scholar.retrieval.rag import build_rag_chain
 from scholar.retrieval.vectorstore import get_embeddings, load_existing_vectorstore
 
@@ -38,7 +41,7 @@ class EvalRun(BaseModel):
 
 def run_eval(
     questions: list[EvalQuestion],
-    config_name: str,
+    config: RetrieverConfig,
     output_path: Path,
 ) -> list[EvalRun]:
     """Run every question through Scholar and save results."""
@@ -46,9 +49,24 @@ def run_eval(
     papers = {p.name for p in chroma.iterdir() if p.is_dir()}
 
     embeddings = get_embeddings()
-    model = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.0)
+    model = get_chat_model()
 
     eval_run_result: list[EvalRun] = []
+    # load every paper vectorstore + chunk once
+    stores_and_chunks: dict[str, tuple[Chroma, list[Document]]] = {}
+    for paper_dir in chroma.iterdir():
+        if not paper_dir.is_dir():
+            continue
+        vs = load_existing_vectorstore(paper_dir, embeddings)
+        if vs is None:
+            continue
+        raw = vs.get()
+        chunks = [
+            Document(page_content=text, metadata=meta)
+            for text, meta in zip(raw["documents"], raw["metadatas"])
+        ]
+        stores_and_chunks[paper_dir.name] = (vs, chunks)
+    papers = set(stores_and_chunks.keys())
 
     for question in questions:
         expected_arxiv_ids: list[str] = question.expected_arxiv_ids
@@ -66,15 +84,14 @@ def run_eval(
         first_retriever = None
 
         for arxiv_id in available_papers:
-            persist_dir = chroma / arxiv_id
-            vectorstore = load_existing_vectorstore(persist_dir, embeddings)
-            if vectorstore is None:
+            vectorstore, chunks = stores_and_chunks[arxiv_id]
+            retriever = build_retriever(config, chunks, vectorstore)
+            if retriever is None:
                 continue
 
-            retriever = vectorstore.as_retriever(search_kwargs={"k": 8})
             if first_retriever is None:
                 first_retriever = retriever  # baseline: answer using the first paper
-
+                assert first_retriever is not None
             docs = retriever.invoke(question.question)
             for rank, doc in enumerate(docs):
                 page = doc.metadata.get("page")
@@ -103,7 +120,7 @@ def run_eval(
             EvalRun(
                 question_id=question.id,
                 question=question.question,
-                config_name=config_name,
+                config_name=config.name,
                 retrieved_chunks=all_chunks,
                 generated_answer=answer,
                 latency_ms=latency_ms,

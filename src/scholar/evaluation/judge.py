@@ -5,7 +5,6 @@ from typing import cast
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts.chat import ChatPromptTemplate
-from langchain_groq.chat_models import ChatGroq
 from pydantic import BaseModel, Field
 
 from scholar.evaluation.runner import EvalRun
