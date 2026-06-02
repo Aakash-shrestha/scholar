@@ -85,8 +85,9 @@ def render_markdown(report: ComparisonReport) -> str:
         "",
         "## Notes",
         "",
-        "Scores produced by `llama-3.3-70b-versatile` as judge with structured output.",
+        "Scores produced by `llama-4-scout` as judge with JSON output parsing.",
         "Context passed to judge was the first 200 chars of each retrieved chunk.",
+        "Judge model selection affects scores significantly — results with `llama-3.1-8b-instant` showed different rankings.",
     ]
     lines.extend(notes)
 
