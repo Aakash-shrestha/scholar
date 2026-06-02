@@ -44,3 +44,27 @@ def build_rag_chain(retriever, model) -> Runnable:
         | StrOutputParser()
     )
     return rag_chain
+
+
+def build_rag_chain_from_docs(docs: list[Document], model) -> Runnable:
+    """
+    Helper function to build a RAG chain directly from a list of documents, without needing a
+    retriever.
+    """
+    prompt = ChatPromptTemplate.from_template(
+        dedent("""
+    You are an expert research assistant. You need to answer the query based on the given context
+    only. Also, when you state the fact, cite the source using that label. If the context
+    does not contain enough information, say it explicitly.
+    context: {context}
+    question: {question}
+        """).strip()
+    )
+
+    rag_chain = (
+        {"context": RunnableLambda(lambda _: format_docs(docs)), "question": RunnablePassthrough()}
+        | prompt
+        | model
+        | StrOutputParser()
+    )
+    return rag_chain

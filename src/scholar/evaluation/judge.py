@@ -1,9 +1,11 @@
 import datetime
+import json
+import time
 from pathlib import Path
 from textwrap import dedent
-from typing import cast
 
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts.chat import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
@@ -72,6 +74,8 @@ def build_judge_prompt(
             point; 5 = matches or exceeds the reference)
 
             Provide your scores AND a one-sentence reasoning for each.
+            Respond ONLY with a JSON object with keys: faithfulness_score, faithfulness_reasoning,
+            helpfulness_score, helpfulness_reasoning. No other text.
         """).strip()
     )
 
@@ -81,11 +85,7 @@ def build_judge_prompt(
 def judge_one(
     eval_run: EvalRun, eval_question: EvalQuestion, model: BaseChatModel, model_name: str
 ) -> Score:
-    """
-    Use the provided model to judge the given eval_run and eval_question, returning a Score object.
-    """
-    context = "\n\n".join(c.text_preview for c in eval_run.retrieved_chunks)  # only first 200 chars
-    # preview for now
+    context = "\n\n".join(c.text_preview for c in eval_run.retrieved_chunks)
 
     prompt_input = {
         "question": eval_question.question,
@@ -94,28 +94,36 @@ def judge_one(
         "generated_answer": eval_run.generated_answer,
     }
 
-    prompt: ChatPromptTemplate = build_judge_prompt(
+    prompt = build_judge_prompt(
         prompt_input["question"],
         prompt_input["context_chunks"],
         prompt_input["reference_answer"],
         prompt_input["generated_answer"],
     )
 
-    judge_model = model.with_structured_output(JudgeOutput)
+    judge_chain = prompt | model | StrOutputParser()
 
-    response = judge_model.invoke(prompt.format_messages(**prompt_input))
-    response = cast(JudgeOutput, response)
+    last_error = None
+    for attempt in range(3):
+        try:
+            raw = judge_chain.invoke(prompt_input)
+            clean = raw.strip().replace("```json", "").replace("```", "").strip()
+            data = json.loads(clean)
+            return Score(
+                question_id=eval_question.id,
+                config_name=eval_run.config_name,
+                faithfulness=data["faithfulness_score"],
+                faithfulness_reasoning=data["faithfulness_reasoning"],
+                helpfulness=data["helpfulness_score"],
+                helpfulness_reasoning=data["helpfulness_reasoning"],
+                judge_model=model_name,
+                timestamp=datetime.datetime.now(),
+            )
+        except Exception as e:
+            last_error = e
+            time.sleep(2**attempt)
 
-    return Score(
-        question_id=eval_question.id,
-        config_name=eval_run.config_name,
-        faithfulness=response.faithfulness_score,
-        faithfulness_reasoning=response.faithfulness_reasoning,
-        helpfulness=response.helpfulness_score,
-        helpfulness_reasoning=response.helpfulness_reasoning,
-        judge_model=model_name,
-        timestamp=datetime.datetime.now(),
-    )
+    raise RuntimeError("Judge failed after 3 attempts") from last_error
 
 
 def run_judge(

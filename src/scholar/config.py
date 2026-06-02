@@ -46,7 +46,13 @@ class Settings(BaseSettings):
     # Groq/Llama models
     groq_model: str = "llama-3.1-8b-instant"
     groq_model_pro: str = "llama-3.3-70b-versatile"
+    groq_model_judge: str = "meta-llama/llama-4-scout-17b-16e-instruct"
 
+    # ollama local models
+    ollama_model: str = "llama3.1"
+    ollama_model_pro: str = "llama3.1:70b"
+
+    # embedding model
     embedding_model: str = "models/text-embedding-004"
     embedding_dimensions: int = 768
 

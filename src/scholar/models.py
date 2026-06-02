@@ -13,10 +13,13 @@ This is the practical payoff of LangChain's abstraction layer:
 
 from __future__ import annotations
 
+import os
+
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_groq.chat_models import ChatGroq
+from langchain_ollama import ChatOllama
 from pydantic import SecretStr
 
 from scholar.config import settings
@@ -26,6 +29,7 @@ def get_chat_model(
     *,
     provider: str = "groq",
     pro: bool = False,
+    judge: bool = False,
     temperature: float = 0.0,
     streaming: bool = False,
 ) -> BaseChatModel:
@@ -39,19 +43,34 @@ def get_chat_model(
         streaming: Whether to stream tokens. Off by default for simplicity.
     """
     if provider == "groq":
-        model_name = settings.groq_model_pro if pro else settings.groq_model
+        model_name = (
+            settings.groq_model_pro
+            if pro
+            else settings.groq_model_judge
+            if judge
+            else settings.groq_model
+        )
         return ChatGroq(
             model=model_name,
             temperature=temperature,
             disable_streaming=not streaming,
         )
-    else:
+    elif provider == "gemini":
         model_name = settings.gemini_model_pro if pro else settings.gemini_model
         return ChatGoogleGenerativeAI(
             model=model_name,
             temperature=temperature,
             disable_streaming=not streaming,
         )
+    elif provider == "ollama":
+        model_name = settings.ollama_model_pro if pro else settings.ollama_model
+        return ChatOllama(
+            model=model_name,
+            temperature=temperature,
+            base_url=os.getenv("OLLAMA_BASE_URL"),
+        )
+    else:
+        raise ValueError(f"Unknown provider: {provider}")
 
 
 def get_embeddings() -> Embeddings:

@@ -2,16 +2,20 @@ import datetime
 import json
 import time
 from pathlib import Path
+from typing import Any
 
 import pydantic
 from langchain_chroma import Chroma
+from langchain_community.cross_encoders import HuggingFaceCrossEncoder
 from langchain_core.documents import Document
 from pydantic import BaseModel
 
+from scholar.evaluation.reranker import rerank_documents
 from scholar.evaluation.schema import EvalQuestion
 from scholar.models import get_chat_model
 from scholar.retrieval.config import RetrieverConfig, build_retriever
-from scholar.retrieval.rag import build_rag_chain
+from scholar.retrieval.rag import build_rag_chain_from_docs
+from scholar.retrieval.rewriter import rewrite_query
 from scholar.retrieval.vectorstore import get_embeddings, load_existing_vectorstore
 
 
@@ -40,20 +44,23 @@ class EvalRun(BaseModel):
 
 
 def run_eval(
-    questions: list[EvalQuestion],
-    config: RetrieverConfig,
-    output_path: Path,
+    questions: list[EvalQuestion], config: RetrieverConfig, output_path: Path
 ) -> list[EvalRun]:
     """Run every question through Scholar and save results."""
     chroma = Path("data/chroma")
     papers = {p.name for p in chroma.iterdir() if p.is_dir()}
 
     embeddings = get_embeddings()
-    model = get_chat_model()
+    model = get_chat_model(pro=False)
+
+    cross_encoder: HuggingFaceCrossEncoder | None = None
+    if config.kind == "reranked":
+        cross_encoder = HuggingFaceCrossEncoder(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
 
     eval_run_result: list[EvalRun] = []
+
     # load every paper vectorstore + chunk once
-    stores_and_chunks: dict[str, tuple[Chroma, list[Document]]] = {}
+    stores_and_chunks: dict[str, tuple[Chroma, list[Document], Any]] = {}
     for paper_dir in chroma.iterdir():
         if not paper_dir.is_dir():
             continue
@@ -65,7 +72,10 @@ def run_eval(
             Document(page_content=text, metadata=meta)
             for text, meta in zip(raw["documents"], raw["metadatas"])
         ]
-        stores_and_chunks[paper_dir.name] = (vs, chunks)
+        retriever = build_retriever(config, chunks, vs)
+        if retriever is None:
+            continue
+        stores_and_chunks[paper_dir.name] = (vs, chunks, retriever)
     papers = set(stores_and_chunks.keys())
 
     for question in questions:
@@ -81,18 +91,19 @@ def run_eval(
             continue
 
         all_chunks: list[RetrievedChunk] = []
-        first_retriever = None
+        merged_docs: list[Document] = []
+        if config.rewrite:
+            final_query = rewrite_query(question.question, model)
+        else:
+            final_query = question.question
 
         for arxiv_id in available_papers:
-            vectorstore, chunks = stores_and_chunks[arxiv_id]
-            retriever = build_retriever(config, chunks, vectorstore)
-            if retriever is None:
-                continue
+            vectorstore, chunks, retriever = stores_and_chunks[arxiv_id]
+            docs = retriever.invoke(final_query)
 
-            if first_retriever is None:
-                first_retriever = retriever  # baseline: answer using the first paper
-                assert first_retriever is not None
-            docs = retriever.invoke(question.question)
+            merged_docs.extend(
+                docs[: config.top_n or 5]
+            )  # only select top_n chunks from each paper
             for rank, doc in enumerate(docs):
                 page = doc.metadata.get("page")
                 if page is None:
@@ -106,16 +117,19 @@ def run_eval(
                         rank=rank,
                     )
                 )
-
-        if first_retriever is None:
-            continue
-
-        rag_chain = build_rag_chain(first_retriever, model)
+        if config.kind == "reranked":
+            assert cross_encoder is not None
+            final_docs = rerank_documents(
+                merged_docs, final_query, config.top_n or 5, cross_encoder
+            )
+        else:
+            final_docs = merged_docs
+        rag_chain = build_rag_chain_from_docs(final_docs, model)
 
         start = time.perf_counter()
         answer = rag_chain.invoke(question.question)
         latency_ms = int((time.perf_counter() - start) * 1000)
-
+        time.sleep(3)
         eval_run_result.append(
             EvalRun(
                 question_id=question.id,

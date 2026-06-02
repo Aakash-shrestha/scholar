@@ -33,6 +33,8 @@ dependencies = [
     "sentence-transformers>=5.5.0",
     "sqlalchemy>=2.0.49",
     "rank-bm25>=0.2.2",
+    "faiss-cpu>=1.14.2",
+    "langchain-ollama>=1.1.0",
 ]
 
 [project.optional-dependencies]

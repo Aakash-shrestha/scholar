@@ -130,6 +130,10 @@ PREDEFINED_CONFIGS = {
         k=8,
     ),
     "hybrid": RetrieverConfig(name="hybrid", kind="hybrid", weight=[0.5, 0.5]),
+    "reranked": RetrieverConfig(name="reranked", kind="reranked", k=20, top_n=3, rewrite=False),
+    "reranked_rewritten": RetrieverConfig(
+        name="reranked_rewritten", kind="reranked", k=20, top_n=3, rewrite=True
+    ),
 }
 
 
@@ -179,10 +183,11 @@ def judge(
     run_file: Path = typer.Option(
         Path("evaluation/runs/baseline_2026-05-21 16:52:49.925143.jsonl"), "--run-file"
     ),
+    question_path: Path = typer.Option(Path("evaluation/questions.jsonl"), "--question-path"),
 ) -> None:
     eval_runs = load_eval_runs(run_file)
-    model = get_chat_model(pro=True)
-    questions = load_questions(Path("evaluation/questions.jsonl"))
+    model = get_chat_model(pro=False, judge=True)
+    questions = load_questions(question_path)
     model_name = getattr(model, "model", "ai chat model")
 
     scores_dir = Path("evaluation/scores")
