@@ -22,6 +22,7 @@ from scholar.models import get_chat_model
 from scholar.retrieval.config import RetrieverConfig
 from scholar.retrieval.rag import build_rag_chain
 from scholar.retrieval.vectorstore import (
+    build_abstract_vectorstore,
     build_vectorstore,
     get_embeddings,
     load_existing_vectorstore,
@@ -47,6 +48,7 @@ def ask(
             "sub_questions": None,
             "sub_questions_docs": None,
             "generated_answer": None,
+            "relevant_paper_ids": None,
         }
     )
     print(Rule(f"[bold cyan]{question}[/bold cyan]"))
@@ -89,7 +91,7 @@ def ingest(source: str) -> None:
     )
 
     corpus_repository.add(paper_record)
-
+    build_abstract_vectorstore(paper_metadata, embeddings)
     print(Rule(f"[bold green]Ingested {paper_metadata.arxiv_id}[/bold green]"))
     print(f"Title: {paper_metadata.title}")
     print(f"Citation: {paper_metadata.short_citation}")

@@ -29,7 +29,7 @@ def get_chat_model(
     *,
     provider: str = "groq",
     pro: bool = False,
-    judge: bool = False,
+    fast: bool = False,
     temperature: float = 0.0,
     streaming: bool = False,
 ) -> BaseChatModel:
@@ -46,8 +46,8 @@ def get_chat_model(
         model_name = (
             settings.groq_model_pro
             if pro
-            else settings.groq_model_judge
-            if judge
+            else settings.groq_model_fast
+            if fast
             else settings.groq_model
         )
         return ChatGroq(

@@ -6,6 +6,7 @@ from langchain_core.embeddings import Embeddings
 from langchain_huggingface import HuggingFaceEmbeddings
 
 from scholar.config import settings
+from scholar.ingestion.arxiv_fetch import ArxivMetadata
 
 
 def get_embeddings() -> Embeddings:
@@ -40,7 +41,7 @@ def build_vectorstore(
 
 def load_all_vectorstore() -> tuple[dict[str, Chroma], dict[str, list[Document]]]:
     embeddings = get_embeddings()
-    dirs = [d for d in settings.chroma_dir.iterdir() if d.is_dir()]
+    dirs = [d for d in settings.chroma_dir.iterdir() if d.is_dir() and d.name != "abstracts"]
     if not dirs:
         raise FileNotFoundError(f"No vectorstores found in {settings.chroma_dir}")
     stores: dict[str, Chroma] = {
@@ -55,3 +56,11 @@ def load_all_vectorstore() -> tuple[dict[str, Chroma], dict[str, list[Document]]
         ]
 
     return stores, chunks
+
+
+def build_abstract_vectorstore(metadata: ArxivMetadata, embeddings: Embeddings) -> Chroma:
+    persist_dir = str(settings.chroma_dir / "abstracts")
+    collection = Chroma(persist_directory=persist_dir, embedding_function=embeddings)
+    document = Document(page_content=metadata.abstract, metadata={"arxiv_id": metadata.arxiv_id})
+    collection.add_documents([document])
+    return collection

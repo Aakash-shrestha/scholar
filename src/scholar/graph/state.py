@@ -12,3 +12,4 @@ class ScholarState(TypedDict):
     sub_questions: list[str] | None
     sub_questions_docs: list[Document] | None
     generated_answer: str | None
+    relevant_paper_ids: list[str] | None
