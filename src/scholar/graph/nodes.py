@@ -1,8 +1,10 @@
+import json
 from textwrap import dedent
 from typing import Any, cast
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
+from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel
 
@@ -28,20 +30,23 @@ def classify_node(state: ScholarState) -> dict[str, Any]:
         Classify the following question into exactly one of these categories.
 
         Categories:
-        - FACTUAL – asks for a specific fact, date, number, or event (e.g. "When was X founded?")
-        - DEFINITIONAL – asks for the meaning or explanation of a term (e.g. "What is X?")
-        - COMPARISON – asks to compare or contrast two or more things (e.g. "How does X differ from Y?")
-        - NEGATIVE – asks what is not the case, or involves negation (e.g. "What does X not include?")
-        - SYNTHESIS – requires the question to be decomposed into sub question (eg. "What is X and How is X different from Y?")
+        - FACTUAL – asks for a specific fact, date, number, or event
+        - DEFINITIONAL – asks for the meaning or explanation of a term
+        - COMPARISON – asks to compare or contrast two or more things
+        - NEGATIVE – asks what is not the case, or involves negation
+        - SYNTHESIS – requires decomposition into sub-questions
 
         Question: {question}
+
+        Respond ONLY with a JSON object like: {{"question_type": "FACTUAL"}}
+        No other text.
         """).strip()
     )
-    structured_model = model.with_structured_output(Classification)
-    result = cast(
-        Classification, (prompt | structured_model).invoke({"question": state["question"]})
-    )
-    return {"question_type": result.question_type}
+    chain = prompt | model | StrOutputParser()
+    raw = chain.invoke({"question": state["question"]})
+    clean = raw.strip().replace("```json", "").replace("```", "").strip()
+    data = json.loads(clean)
+    return {"question_type": QuestionType(data["question_type"].lower())}
 
 
 def retrieve_baseline_node(state: ScholarState, stores: dict[str, Chroma]) -> dict[str, Any]:
@@ -49,7 +54,7 @@ def retrieve_baseline_node(state: ScholarState, stores: dict[str, Chroma]) -> di
     for store in stores.values():
         retriever = store.as_retriever(search_kwargs={"k": 8})
         retrieved_docs = retriever.invoke(state["question"])
-        merged_docs.extend(retrieved_docs)
+        merged_docs.extend(retrieved_docs[:3])
     return {"retrieved_docs": merged_docs}
 
 
@@ -61,7 +66,7 @@ def retrieve_hybrid_node(
         paper_chunk = chunks[arxiv_id]
         retriever = get_hybrid_retriever(paper_chunk, store)
         retrieved_docs = retriever.invoke(state["question"])
-        merged_docs.extend(retrieved_docs)
+        merged_docs.extend(retrieved_docs[:3])
     return {"retrieved_docs": merged_docs}
 
 
@@ -100,9 +105,9 @@ def retrieve_multi_node(state: ScholarState, stores: dict[str, Chroma]) -> dict[
 
     for question in sub_questions:
         for store in stores.values():
-            retriever = store.as_retriever(search_kwargs={"k": 8})
+            retriever = store.as_retriever(search_kwargs={"k": 3})
             retrieved_docs = retriever.invoke(question)
-            merged_docs.extend(retrieved_docs)
+            merged_docs.extend(retrieved_docs[:1])
 
     return {"sub_questions_docs": merged_docs}
 

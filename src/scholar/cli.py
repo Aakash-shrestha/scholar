@@ -15,6 +15,7 @@ from scholar.evaluation.judge import Score, run_judge
 from scholar.evaluation.report import ComparisonReport, compute_summary, render_markdown
 from scholar.evaluation.runner import load_eval_runs, run_eval
 from scholar.evaluation.schema import load_questions
+from scholar.graph.graph import create_graph
 from scholar.ingestion.arxiv_fetch import download_paper, enrich_chunks, fetch_arxiv_metadata
 from scholar.ingestion.loader import load_and_chunk
 from scholar.models import get_chat_model
@@ -32,27 +33,24 @@ load_dotenv()
 
 @app.command()
 def ask(
-    question: str, paper: Path = typer.Option(Path("data/papers/1706.03762.pdf"), "--paper")
+    question: str,
+    paper: Path = typer.Option(Path("data/papers/1706.03762.pdf"), "--paper"),
+    # paper is not required anymore, only keeping it for backtracking, if needed
 ) -> None:
     """Ask a question about a paper. Retrieves relevant context and answers with citations."""
-    if not paper.exists():
-        typer.echo(f"Error: paper not found: {paper}", err=True)
-        raise typer.Exit(code=1)
-
-    persistent_dir = Path("data/chroma") / paper.stem  # .stem gives file name without ext
-    embeddings = get_embeddings()
-    vectorstore = load_existing_vectorstore(persistent_dir, embeddings)
-    if vectorstore is None:
-        chunks = load_and_chunk(paper)
-        vectorstore = build_vectorstore(chunks, persistent_dir, embeddings)
-
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 8})
-    model = get_chat_model()
-
-    rag_chain = build_rag_chain(retriever, model)
-    response = rag_chain.invoke(question)
+    graph = create_graph()
+    result = graph.invoke(
+        {
+            "question": question,
+            "question_type": None,
+            "retrieved_docs": [],
+            "sub_questions": None,
+            "sub_questions_docs": None,
+            "generated_answer": None,
+        }
+    )
     print(Rule(f"[bold cyan]{question}[/bold cyan]"))
-    print(response)
+    print(result["generated_answer"])
 
 
 @app.command()
