@@ -18,8 +18,8 @@ The CLI exposes everything: `scholar ingest`, `scholar list`, `scholar ask`, `sc
 
 ## Why this exists
 
-LLMs are great at summarizing one paper. They struggle with the real research workflow: synthesizing across dozens of sources, tracking who claimed what, and noticing when the literature contradicts itself. Scholar is built around that workflow — and unlike most LangChain projects, it ships with a real evaluation harness to measure quality at every step.
-
+Scholar is built around that workflow — with a reproducible evaluation harness 
+to measure quality at each stage.
 ## Tech stack
 
 - **Orchestration:** LangChain (LangGraph coming in Phase 4)
@@ -51,7 +51,7 @@ cp .env.example .env
 
 # 4. Ingest a paper and ask it something
 uv run scholar ingest arxiv:1706.03762
-uv run scholar ask "What is multi-head attention?" --paper data/papers/1706.03762.pdf
+uv run scholar ask "What is multi-head attention?" 
 ```
 
 ## Roadmap
