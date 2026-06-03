@@ -138,6 +138,33 @@ def retrieve_multi_node(state: ScholarState, stores: dict[str, Chroma]) -> dict[
     return {"sub_questions_docs": merged_docs}
 
 
+def critic_node(state: ScholarState) -> dict[str, Any]:
+    generated_answer = state["generated_answer"] or ""
+    failure_terms = [
+        "i couldn't find",
+        "no context",
+        "not mentioned",
+        "not provided",
+        "does not mention",
+        "cannot answer",
+        "no information",
+        "i don't know",
+        "not found in",
+        "outside the scope",
+        "the context does not contain",
+        "context does not contain",
+        "does not contain enough",
+    ]
+    is_failure = any(term in generated_answer.lower() for term in failure_terms)
+    print(
+        f"is_failure: {is_failure}, retry_count: {state['retry_count']}, needs_retry: {state['needs_retry']}"
+    )
+    if not is_failure or state["retry_count"] >= 2:
+        return {"retry_count": state["retry_count"], "needs_retry": False}
+    else:
+        return {"retry_count": state["retry_count"] + 1, "needs_retry": True}
+
+
 def generate_node(state: ScholarState) -> dict[str, Any]:
     docs: list[Document] = []
 

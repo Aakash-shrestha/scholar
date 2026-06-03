@@ -5,6 +5,7 @@ from langgraph.graph import END, START, StateGraph
 from scholar.evaluation.schema import QuestionType
 from scholar.graph.nodes import (
     classify_node,
+    critic_node,
     decompose_node,
     find_relevant_paper_node,
     generate_node,
@@ -25,6 +26,12 @@ def route_question(state: ScholarState) -> str:
         return "retrieve_baseline"
 
 
+def route_critic(state: ScholarState) -> str:
+    if state["needs_retry"]:
+        return "retrieve_baseline"
+    return END
+
+
 def create_graph():
     graph = StateGraph(ScholarState)
 
@@ -43,6 +50,7 @@ def create_graph():
     graph.add_node("retrieve_hybrid", partial(retrieve_hybrid_node, stores=stores, chunks=chunks))
     graph.add_node("decompose", decompose_node)
     graph.add_node("retrieve_multi", partial(retrieve_multi_node, stores=stores))
+    graph.add_node("critic", critic_node)
     graph.add_node("generate", generate_node)
 
     # edges
@@ -52,7 +60,8 @@ def create_graph():
     graph.add_edge("retrieve_hybrid", "generate")
     graph.add_edge("decompose", "retrieve_multi")
     graph.add_edge("retrieve_multi", "generate")
-    graph.add_edge("generate", END)
+    graph.add_edge("generate", "critic")
     graph.add_conditional_edges("relevant_papers", route_question)
+    graph.add_conditional_edges("critic", route_critic)
 
     return graph.compile()

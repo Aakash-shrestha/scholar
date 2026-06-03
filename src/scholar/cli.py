@@ -20,12 +20,10 @@ from scholar.ingestion.arxiv_fetch import download_paper, enrich_chunks, fetch_a
 from scholar.ingestion.loader import load_and_chunk
 from scholar.models import get_chat_model
 from scholar.retrieval.config import RetrieverConfig
-from scholar.retrieval.rag import build_rag_chain
 from scholar.retrieval.vectorstore import (
     build_abstract_vectorstore,
     build_vectorstore,
     get_embeddings,
-    load_existing_vectorstore,
 )
 
 app = typer.Typer()
@@ -49,6 +47,8 @@ def ask(
             "sub_questions_docs": None,
             "generated_answer": None,
             "relevant_paper_ids": None,
+            "retry_count": 0,
+            "needs_retry": False,
         }
     )
     print(Rule(f"[bold cyan]{question}[/bold cyan]"))
