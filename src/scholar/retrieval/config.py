@@ -12,7 +12,7 @@ class RetrieverConfig(BaseModel):
     """Configuration for the Retriever component, which handles document retrieval and embedding."""
 
     name: str
-    kind: Literal["semantic", "hybrid", "reranked"]
+    kind: Literal["semantic", "hybrid", "reranked", "graph"]
     k: int = 8
     weight: list[float] | None = None  # only used by hybrd
     top_n: int | None = None  # for reranked retriever

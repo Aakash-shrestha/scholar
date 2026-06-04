@@ -59,7 +59,7 @@ uv run scholar ask "What is multi-head attention?"
 - [x] Phase 1 — Foundations & first working RAG
 - [x] Phase 2 — Robust paper ingestion (arXiv, corpus database)
 - [x] Phase 3 — Advanced retrieval (hybrid, re-ranking, query rewriting, eval suite)
-- [ ] Phase 4 — Multi-agent LangGraph system with parallel research and a critic agent
+- [x] Phase 4 — Multi-agent LangGraph system with parallel research and a critic agent
 - [ ] Phase 5 — Citation graph, contradiction detection, and structured literature reviews
 - [ ] Phase 6 — Web UI, streaming reasoning, and deployment
 
@@ -93,16 +93,21 @@ dominates.
 
 ### Results
 
-| Configuration | n  | Faithfulness        | Helpfulness         |
-|---------------|----|---------------------|---------------------|
-| baseline      | 28 | 4.57 ± 0.88 (1–5)   | 3.64 ± 1.57 (1–5)   |
-| **hybrid**    | 28 | **4.82 ± 0.61 (2–5)** | **4.11 ± 1.45 (1–5)** |
-| reranked      | 28 | 4.43 ± 1.07 (1–5)   | 3.75 ± 1.40 (1–5)   |
+
+| Configuration | n | Faithfulness | Helpfulness |
+|---------------|---|--------------|-------------|
+| baseline | 28 | 4.57 ± 0.88 (1–5) | 3.64 ± 1.57 (1–5) |
+| hybrid | 28 | 4.82 ± 0.61 (2–5) | 4.11 ± 1.45 (1–5) |
+| reranked | 28 | 4.43 ± 1.07 (1–5) | 3.75 ± 1.40 (1–5) |
+| graph | 28 | 4.68 ± 0.90 (1–5) | 3.93 ± 1.30 (1–5) |
 
 Hybrid retrieval is the strongest configuration overall, improving both
 faithfulness (+0.25) and helpfulness (+0.47) over the semantic-only baseline.
 BM25 reliably surfaces chunks containing distinctive lexical markers
 ("28.4 BLEU", "175 billion parameters") that pure embedding similarity misses.
+Graph retrievel also have a strong result overall, but just behind hybrid, it is
+partially because, the eval question does not have alot of synthesis question kind,
+which would possibly help improve the score of graph as well. 
 
 ### Findings
 

@@ -1,6 +1,6 @@
 # Scholar Evaluation Report
 
-Generated: 2026-06-02T16:26:49
+Generated: 2026-06-04T10:51:21
 Total Questions: 28
 
 ## Summary
@@ -10,6 +10,7 @@ Total Questions: 28
 | baseline | 28 | 4.57 ± 0.88 (1–5) | 3.64 ± 1.57 (1–5) |
 | hybrid | 28 | 4.82 ± 0.61 (2–5) | 4.11 ± 1.45 (1–5) |
 | reranked | 28 | 4.43 ± 1.07 (1–5) | 3.75 ± 1.40 (1–5) |
+| graph | 28 | 4.68 ± 0.90 (1–5) | 3.93 ± 1.30 (1–5) |
 
 ## Notes
 

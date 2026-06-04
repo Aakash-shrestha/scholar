@@ -156,9 +156,6 @@ def critic_node(state: ScholarState) -> dict[str, Any]:
         "does not contain enough",
     ]
     is_failure = any(term in generated_answer.lower() for term in failure_terms)
-    print(
-        f"is_failure: {is_failure}, retry_count: {state['retry_count']}, needs_retry: {state['needs_retry']}"
-    )
     if not is_failure or state["retry_count"] >= 2:
         return {"retry_count": state["retry_count"], "needs_retry": False}
     else:

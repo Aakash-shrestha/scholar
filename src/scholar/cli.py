@@ -134,6 +134,7 @@ PREDEFINED_CONFIGS = {
     "reranked_rewritten": RetrieverConfig(
         name="reranked_rewritten", kind="reranked", k=20, top_n=3, rewrite=True
     ),
+    "graph": RetrieverConfig(name="graph", kind="graph"),
 }
 
 
@@ -186,7 +187,7 @@ def judge(
     question_path: Path = typer.Option(Path("evaluation/questions.jsonl"), "--question-path"),
 ) -> None:
     eval_runs = load_eval_runs(run_file)
-    model = get_chat_model(pro=False, judge=True)
+    model = get_chat_model(pro=False, fast=True)
     questions = load_questions(question_path)
     model_name = getattr(model, "model", "ai chat model")
 
