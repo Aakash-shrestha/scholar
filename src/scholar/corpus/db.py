@@ -27,6 +27,15 @@ class Paper(Base):
     )
 
 
+class Citation(Base):
+    """A citation from one paper to another."""
+
+    __tablename__ = "citations"
+    #has composite primary key both source + cited
+    source_arxiv_id: Mapped[str] = mapped_column(primary_key=True) # the paper that cites ->
+    cited_arxiv_id: Mapped[str] = mapped_column(primary_key=True) # -> the paper being cited
+
+
 def get_engine(db_path: Path = Path("data/scholar.db")) -> Engine:
     """Returns a SQLAlchemy engine connected to the specified SQLite database."""
     db_path.parent.mkdir(parents=True, exist_ok=True)

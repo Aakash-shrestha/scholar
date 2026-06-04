@@ -33,12 +33,15 @@ class ArxivMetadata(BaseModel):
     pdf_url: str = Field(description="Url of the pdf of the research paper")
 
 
+_client = arxiv.Client(delay_seconds=10, num_retries=3, page_size=1)
+
+
 def fetch_arxiv_metadata(arxiv_id: str) -> ArxivMetadata:
     """Fetch a paper's metadata from arXiv given its ID."""
     if not isinstance(arxiv_id, str) or not arxiv_id.strip():
         raise ValueError("arxiv_id must be a non-empty string")
     search = arxiv.Search(id_list=[arxiv_id], max_results=1)
-    client = arxiv.Client(delay_seconds=3, num_retries=0, page_size=1)
+    client = _client
     last_error: Exception | None = None
     paper = None
     for attempt in range(1, 6):
@@ -47,11 +50,56 @@ def fetch_arxiv_metadata(arxiv_id: str) -> ArxivMetadata:
             break
         except arxiv.HTTPError as exc:
             last_error = exc
-            if getattr(exc, "status_code", None) != 429 and "429" not in str(exc):
+            if (
+                getattr(exc, "status_code", None) not in (429, 503)
+                and "429" not in str(exc)
+                and "503" not in str(exc)
+            ):
                 raise
+            print(f"Rate limited, attempt {attempt}, sleeping {2**attempt}s")
             time.sleep(2**attempt)
     if paper is None:
         raise last_error if last_error else RuntimeError("Failed to fetch arXiv metadata")
+
+    raw_arxiv_id = paper.get_short_id()
+    arxiv_id = re.sub(r"v\d+$", "", raw_arxiv_id)
+
+    return ArxivMetadata(
+        arxiv_id=arxiv_id,
+        title=paper.title,
+        authors=[a.name for a in paper.authors],
+        abstract=paper.summary,
+        year=paper.published.year,
+        pdf_url=str(paper.pdf_url),
+    )
+
+
+def search_arxiv_by_title(title: str) -> ArxivMetadata | None:
+    """Fetch a paper's metadata from arXiv its title."""
+    search = arxiv.Search(query=f"ti:{title}", max_results=1)
+    client = _client
+    paper = None
+    last_error: Exception | None = None
+    for attempt in range(1, 6):
+        try:
+            paper = next(client.results(search))
+            break
+        except StopIteration:
+            break
+        except arxiv.HTTPError as exc:
+            last_error = exc
+            if (
+                getattr(exc, "status_code", None) not in (429, 503)
+                and "429" not in str(exc)
+                and "503" not in str(exc)
+            ):
+                raise
+            print(f"(search by title)Rate limited, attempt {attempt}, sleeping {2**attempt}s")
+            time.sleep(2**attempt)
+    if paper is None:
+        if last_error is not None:
+            raise last_error
+        return None
 
     raw_arxiv_id = paper.get_short_id()
     arxiv_id = re.sub(r"v\d+$", "", raw_arxiv_id)

@@ -2,7 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm.session import Session
 
-from scholar.corpus.db import Paper
+from scholar.corpus.db import Citation, Paper
 
 
 class CorpusRepository:
@@ -31,4 +31,38 @@ class CorpusRepository:
         """Lists all papers in the database in descending order of ingested_at time"""
         with Session(self.engine) as session:
             stmt = select(Paper).order_by(Paper.ingested_at.desc())
+            return list(session.scalars(stmt))
+
+
+class CitationRepository:
+    """
+    Citation Repository is the class that controls the access to the citations table in the database.
+    """
+
+    def __init__(self, engine: Engine) -> None:
+        self.engine = engine
+
+    def get(self, source_arxiv_id: str, cited_arxiv_id: str) -> Citation | None:
+        with Session(self.engine) as session:
+            return session.get(Citation, (source_arxiv_id, cited_arxiv_id))
+
+    def add(self, source_arxiv_id: str, cited_arxiv_id: str) -> None:
+        if self.get(source_arxiv_id, cited_arxiv_id) is not None:
+            return
+        citation = Citation(
+            source_arxiv_id=source_arxiv_id,
+            cited_arxiv_id=cited_arxiv_id,
+        )
+        with Session(self.engine) as session:
+            session.add(citation)
+            session.commit()
+
+    def get_cited_by(self, arxiv_id: str) -> list[Paper]:
+        """returns all the papers cited by arxiv_id"""
+        with Session(self.engine) as session:
+            stmt = (
+                select(Paper)
+                .join(Citation, Paper.arxiv_id == Citation.cited_arxiv_id)
+                .where(Citation.source_arxiv_id == arxiv_id)
+            )
             return list(session.scalars(stmt))

@@ -1,5 +1,6 @@
 import datetime
 import re
+import time
 from pathlib import Path
 
 import typer
@@ -9,20 +10,22 @@ from rich.console import Console
 from rich.rule import Rule
 from rich.table import Table
 
+from scholar.config import settings
 from scholar.corpus.db import Paper, get_engine, init_db
-from scholar.corpus.repository import CorpusRepository
+from scholar.corpus.repository import CitationRepository, CorpusRepository
 from scholar.evaluation.judge import Score, run_judge
 from scholar.evaluation.report import ComparisonReport, compute_summary, render_markdown
 from scholar.evaluation.runner import load_eval_runs, run_eval
 from scholar.evaluation.schema import load_questions
 from scholar.graph.graph import create_graph
-from scholar.ingestion.arxiv_fetch import download_paper, enrich_chunks, fetch_arxiv_metadata
-from scholar.ingestion.loader import load_and_chunk
+from scholar.ingestion.arxiv_fetch import (
+    search_arxiv_by_title,
+)
+from scholar.ingestion.extract_references import ExtractedReference, extract_references
+from scholar.ingestion.ingest import ingest_paper
 from scholar.models import get_chat_model
 from scholar.retrieval.config import RetrieverConfig
 from scholar.retrieval.vectorstore import (
-    build_abstract_vectorstore,
-    build_vectorstore,
     get_embeddings,
 )
 
@@ -66,36 +69,8 @@ def ingest(source: str) -> None:
 
     arxiv_id = re.sub(r"^arxiv:", "", source, flags=re.IGNORECASE)  # remove arxiv:
     arxiv_id = re.sub(r"v\d+$", "", arxiv_id)  # remove versioning v1..
-
-    if corpus_repository.get(arxiv_id) is not None:
-        print(f"[bold yellow]Paper {arxiv_id} already ingested. Skipping ingestion.[/bold yellow]")
-        raise typer.Exit()
-
-    paper_metadata = fetch_arxiv_metadata(arxiv_id)
-    paper_path = download_paper(paper_metadata)
-
-    chunks = load_and_chunk(paper_path)
-    enriched_chunks = enrich_chunks(chunks, paper_metadata)
-    persistent_dir = Path("data/chroma") / arxiv_id
-
     embeddings = get_embeddings()
-    build_vectorstore(enriched_chunks, persistent_dir, embeddings)
-    paper_record = Paper(
-        arxiv_id=arxiv_id,
-        title=paper_metadata.title,
-        short_citation=paper_metadata.short_citation,
-        year=paper_metadata.year,
-        abstract=paper_metadata.abstract,
-        pdf_path=str(paper_path),
-        persist_dir=str(Path("data/chroma") / arxiv_id),
-    )
-
-    corpus_repository.add(paper_record)
-    build_abstract_vectorstore(paper_metadata, embeddings)
-    print(Rule(f"[bold green]Ingested {paper_metadata.arxiv_id}[/bold green]"))
-    print(f"Title: {paper_metadata.title}")
-    print(f"Citation: {paper_metadata.short_citation}")
-    print(f"Stored at: {persistent_dir}")
+    ingest_paper(arxiv_id, corpus_repository, embeddings)
 
 
 @app.command(name="list")
@@ -279,3 +254,51 @@ def report(
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(markdown)
     typer.echo(f"Report written to {output}")
+
+
+@app.command(name="ingest_refs")
+def ingest_references(arxiv_id: str, limit: int = typer.Option(10, "--limit")) -> None:
+
+    engine = get_engine()
+    init_db(engine)
+    corpus_repository = CorpusRepository(engine)
+    citation_repository = CitationRepository(engine)
+    paper_path = settings.papers_dir
+    matching_paper_path = [paper for paper in paper_path.iterdir() if paper.stem == arxiv_id]
+    if not matching_paper_path:
+        print(f"[bold red]Paper with arxiv_id {arxiv_id} not found in {paper_path}[/bold red]")
+        raise typer.Exit(code=1)
+
+    embeddings = get_embeddings()
+    references: list[ExtractedReference] = extract_references(matching_paper_path[0])
+    ingested_papers: list[str] = []
+    skipped_papers: list[str] = []
+    for reference in references:
+        if len(ingested_papers) >= limit:
+            break
+        if reference.arxiv_id is None:
+            result = search_arxiv_by_title(reference.title)
+            if result is None:
+                skipped_papers.append(reference.title)
+                continue
+            ref_arxiv_id = result.arxiv_id
+        else:
+            ref_arxiv_id = reference.arxiv_id
+        if corpus_repository.get(ref_arxiv_id) is not None:
+            citation_repository.add(arxiv_id, ref_arxiv_id)  # add already ingested papers too
+            skipped_papers.append(ref_arxiv_id)
+            continue
+
+        time.sleep(5)
+        is_ingested = ingest_paper(ref_arxiv_id, corpus_repository, embeddings)
+
+        if is_ingested:
+            ingested_papers.append(ref_arxiv_id)
+            citation_repository.add(arxiv_id, ref_arxiv_id)
+        else:
+            skipped_papers.append(ref_arxiv_id)
+
+    print(Rule("[bold green]Ingestion Summary[/bold green]"))
+    print(f"References found:  {len(references)}")
+    print(f"Ingested:          {len(ingested_papers)}")
+    print(f"Skipped:           {len(skipped_papers)}")
