@@ -22,7 +22,7 @@ from scholar.ingestion.arxiv_fetch import (
     search_arxiv_by_title,
 )
 from scholar.ingestion.extract_references import ExtractedReference, extract_references
-from scholar.ingestion.ingest import ingest_paper
+from scholar.ingestion.ingest import ingest_paper, ingest_ref_paper
 from scholar.models import get_chat_model
 from scholar.retrieval.config import RetrieverConfig
 from scholar.retrieval.vectorstore import (
@@ -263,42 +263,16 @@ def ingest_references(arxiv_id: str, limit: int = typer.Option(10, "--limit")) -
     init_db(engine)
     corpus_repository = CorpusRepository(engine)
     citation_repository = CitationRepository(engine)
-    paper_path = settings.papers_dir
-    matching_paper_path = [paper for paper in paper_path.iterdir() if paper.stem == arxiv_id]
-    if not matching_paper_path:
-        print(f"[bold red]Paper with arxiv_id {arxiv_id} not found in {paper_path}[/bold red]")
-        raise typer.Exit(code=1)
-
     embeddings = get_embeddings()
-    references: list[ExtractedReference] = extract_references(matching_paper_path[0])
-    ingested_papers: list[str] = []
-    skipped_papers: list[str] = []
-    for reference in references:
-        if len(ingested_papers) >= limit:
-            break
-        if reference.arxiv_id is None:
-            result = search_arxiv_by_title(reference.title)
-            if result is None:
-                skipped_papers.append(reference.title)
-                continue
-            ref_arxiv_id = result.arxiv_id
-        else:
-            ref_arxiv_id = reference.arxiv_id
-        if corpus_repository.get(ref_arxiv_id) is not None:
-            citation_repository.add(arxiv_id, ref_arxiv_id)  # add already ingested papers too
-            skipped_papers.append(ref_arxiv_id)
-            continue
 
-        time.sleep(5)
-        is_ingested = ingest_paper(ref_arxiv_id, corpus_repository, embeddings)
-
-        if is_ingested:
-            ingested_papers.append(ref_arxiv_id)
-            citation_repository.add(arxiv_id, ref_arxiv_id)
-        else:
-            skipped_papers.append(ref_arxiv_id)
+    references, ingested_papers, skipped_papers, total_found = ingest_ref_paper(
+        arxiv_id, corpus_repository, citation_repository, embeddings, limit
+    )
 
     print(Rule("[bold green]Ingestion Summary[/bold green]"))
-    print(f"References found:  {len(references)}")
+    print("Extracted References:")
+    for ref in references:
+        print(f"  - {ref.title}")
     print(f"Ingested:          {len(ingested_papers)}")
     print(f"Skipped:           {len(skipped_papers)}")
+    print(f"Total Found:           {total_found}")

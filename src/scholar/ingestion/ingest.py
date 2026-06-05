@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 
 from langchain_core.embeddings import Embeddings
@@ -5,8 +6,14 @@ from rich import print
 from rich.rule import Rule
 
 from scholar.corpus.db import Paper
-from scholar.corpus.repository import CorpusRepository
-from scholar.ingestion.arxiv_fetch import download_paper, enrich_chunks, fetch_arxiv_metadata
+from scholar.corpus.repository import CitationRepository, CorpusRepository
+from scholar.ingestion.arxiv_fetch import (
+    download_paper,
+    enrich_chunks,
+    fetch_arxiv_metadata,
+    search_arxiv_by_title,
+)
+from scholar.ingestion.extract_references import ExtractedReference, extract_references
 from scholar.ingestion.loader import load_and_chunk
 from scholar.retrieval.vectorstore import (
     build_abstract_vectorstore,
@@ -49,3 +56,47 @@ def ingest_paper(
     print(f"Citation: {paper_metadata.short_citation}")
     print(f"Stored at: {persistent_dir}")
     return True
+
+
+def ingest_ref_paper(
+    arxiv_id: str,
+    corpus_repository: CorpusRepository,
+    citation_repository: CitationRepository,
+    embeddings: Embeddings,
+    limit: int = 5,
+) -> tuple[list[ExtractedReference], list[str], list[str], int]:
+    """
+    Extract and ingest references for a paper.
+    Returns (references, ingested, skipped, total_found).
+    """
+    paper = corpus_repository.get(arxiv_id)
+    if paper is None:
+        raise ValueError(f"Paper {arxiv_id} not found. Ingest it first.")
+    references: list[ExtractedReference] = extract_references(Path(paper.pdf_path))
+    ingested_papers: list[str] = []
+    skipped_papers: list[str] = []
+    for reference in references:
+        if len(ingested_papers) >= limit:
+            break
+        if reference.arxiv_id is None:
+            result = search_arxiv_by_title(reference.title)
+            if result is None:
+                skipped_papers.append(reference.title)
+                continue
+            ref_arxiv_id = result.arxiv_id
+        else:
+            ref_arxiv_id = reference.arxiv_id
+        if corpus_repository.get(ref_arxiv_id) is not None:
+            citation_repository.add(arxiv_id, ref_arxiv_id)  # add already ingested papers too
+            skipped_papers.append(ref_arxiv_id)
+            continue
+
+        time.sleep(5)
+        is_ingested = ingest_paper(ref_arxiv_id, corpus_repository, embeddings)
+
+        if is_ingested:
+            ingested_papers.append(ref_arxiv_id)
+            citation_repository.add(arxiv_id, ref_arxiv_id)
+        else:
+            skipped_papers.append(ref_arxiv_id)
+    return (references, ingested_papers, skipped_papers, len(references))

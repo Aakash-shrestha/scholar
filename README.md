@@ -152,6 +152,9 @@ The eval suite is honest about what it does and doesn't measure:
    helpfulness — the hybrid > baseline conclusion is suggestive, not statistically
    significant.
 
+## Note
+scholar ingest_refs <arxiv_id> --limit N — extracts references from an ingested paper and auto-ingests up to N cited papers, storing citation relationships in SQLite. ArXiv API rate limits apply; use small --limit values.
+
 ## License
 
 MIT
