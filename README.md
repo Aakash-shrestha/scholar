@@ -16,6 +16,10 @@ Today, Scholar lets you build a small corpus of arXiv papers and ask grounded, c
 
 The CLI exposes everything: `scholar ingest`, `scholar list`, `scholar ask`, `scholar eval`, `scholar judge`, `scholar report`.
 
+## Live Demo
+Frontend: https://scholar-ui-two.vercel.app
+Backend: Self-hosted (run locally with uvicorn)
+
 ## Why this exists
 
 Scholar is built around that workflow — with a reproducible evaluation harness 
