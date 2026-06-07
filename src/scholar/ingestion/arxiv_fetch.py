@@ -46,7 +46,9 @@ def fetch_arxiv_metadata(arxiv_id: str) -> ArxivMetadata:
     paper = None
     for attempt in range(1, 6):
         try:
-            paper = next(client.results(search))
+            paper = next(client.results(search), None)
+            if paper is None:
+                raise ValueError(f"No paper found for arXiv ID: {arxiv_id}")
             break
         except arxiv.HTTPError as exc:
             last_error = exc

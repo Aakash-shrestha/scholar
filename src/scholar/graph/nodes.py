@@ -1,4 +1,5 @@
 import json
+import re
 from textwrap import dedent
 from typing import Any, cast
 
@@ -39,15 +40,23 @@ def classify_node(state: ScholarState) -> dict[str, Any]:
                  multiple works over time (e.g. "How has X evolved from A to B?",
                  "What are the combined implications of X and Y?")
            Question: {question}
+           You MUST pick exactly one. Valid values are: FACTUAL, DEFINITIONAL, COMPARISON, NEGATIVE, SYNTHESIS.
            Respond ONLY with a JSON object like: {{"question_type": "FACTUAL"}}
-           No other text.
+           No other text, no combinations, no new categories.
            """).strip()
     )
     chain = prompt | model | StrOutputParser()
     raw = chain.invoke({"question": state["question"]})
     clean = raw.strip().replace("```json", "").replace("```", "").strip()
-    data = json.loads(clean)
-    return {"question_type": QuestionType(data["question_type"].lower())}
+    match = re.search(r"\{.*?\}", clean, re.DOTALL)
+    if not match:
+        raise ValueError(f"No JSON object found in classify response: {raw!r}")
+    data = json.loads(match.group())
+    raw_type = data["question_type"].lower()
+    valid = {q.value for q in QuestionType}
+    if raw_type not in valid:
+        raw_type = "factual"
+    return {"question_type": QuestionType(raw_type)}
 
 
 def find_relevant_paper_node(

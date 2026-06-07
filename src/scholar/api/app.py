@@ -3,7 +3,7 @@ import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
-from rich.rule import Rule
+from fastapi.middleware.cors import CORSMiddleware
 
 from scholar.api.schemas import (
     AskRequest,
@@ -27,12 +27,24 @@ async def lifespan(app: FastAPI):
     app.state.repo = CorpusRepository(engine)
     app.state.cite_repo = CitationRepository(engine)
     app.state.embeddings = get_embeddings()
-    app.state.graph = create_graph()
+    try:
+        app.state.graph = create_graph()
+        print("[scholar] Graph loaded successfully.")
+    except FileNotFoundError as e:
+        print(f"[scholar] Graph not loaded: {e}")
+        app.state.graph = None
 
     yield
 
 
 app = FastAPI(title="Scholar API", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/papers", response_model=list[PaperResponse])
@@ -61,6 +73,7 @@ def add_paper(request: IngestPaperRequest):
         )
     is_ingested = ingest_paper(arxiv_id, app.state.repo, app.state.embeddings)
     if is_ingested:
+        app.state.graph = create_graph()
         paper = app.state.repo.get(arxiv_id)
         return PaperResponse(
             arxiv_id=paper.arxiv_id,
@@ -106,6 +119,8 @@ def add_ref_paper(arxiv_id: str, request: IngestRefPaperRequest):
 
 @app.post("/ask", response_model=AskResponse)
 def ask_question(request: AskRequest):
+    if app.state.graph is None:
+        raise HTTPException(status_code=503, detail="No papers ingested yet. Ingest a paper first.")
     start = time.perf_counter()
     result = app.state.graph.invoke(
         {

@@ -30,9 +30,14 @@ def build_rag_chain(retriever, model) -> Runnable:
     model to answer the question based on the retrieved context."""
     prompt = ChatPromptTemplate.from_template(
         dedent("""
-    You are an expert research assistant. You need to answer the query based on the given context
-    only. Also, when you state the fact, cite the source using that label. If the context
-    does not contain enough information, say it explicitly.
+    You are an expert research assistant. Answer the query using only the provided context.
+    Cite every fact with its source label. If the context lacks sufficient information, say so explicitly.
+
+    Formatting rules:
+    - Use $...$ for inline math expressions (e.g. $\\sqrt{{d_k}}$).
+    - Use $$...$$ on its own line for display/block equations (e.g. standalone formulas).
+    - Never use plain text or code blocks for mathematical notation.
+
     context: {context}
     question: {question}
         """).strip()
@@ -53,9 +58,14 @@ def build_rag_chain_from_docs(docs: list[Document], model) -> Runnable:
     """
     prompt = ChatPromptTemplate.from_template(
         dedent("""
-    You are an expert research assistant. You need to answer the query based on the given context
-    only. Also, when you state the fact, cite the source using that label. If the context
-    does not contain enough information, say it explicitly.
+    You are an expert research assistant. Answer the query using only the provided context.
+    Cite every fact with its source label. If the context lacks sufficient information, say so explicitly.
+
+    Formatting rules:
+    - Use $...$ for inline math expressions (e.g. $\\sqrt{{d_k}}$).
+    - Use $$...$$ on its own line for display/block equations (e.g. standalone formulas).
+    - Never use plain text or code blocks for mathematical notation.
+
     context: {context}
     question: {question}
         """).strip()
