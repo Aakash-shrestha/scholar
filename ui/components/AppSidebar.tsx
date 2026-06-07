@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { MessageSquare, BookOpen } from "lucide-react";
+import { MessageSquare, BookOpen, Network } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Sidebar,
@@ -18,6 +18,7 @@ import {
 const NAV = [
   { href: "/", label: "Ask", icon: MessageSquare },
   { href: "/papers", label: "Papers", icon: BookOpen },
+  { href: "/graph", label: "Graph", icon: Network },
 ];
 
 export function AppSidebar() {

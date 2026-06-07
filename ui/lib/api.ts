@@ -30,6 +30,8 @@ export const api = {
       headers: HEADERS,
       body: JSON.stringify({ question }),
     }).then(parseResponse),
+  getGraph: () =>
+    fetch(`${API_BASE}/graph`, { headers: HEADERS }).then(parseResponse),
   ingestRefs: (arxiv_id: string, limit: number) =>
     fetch(`${API_BASE}/papers/${arxiv_id}/refs`, {
       method: "POST",

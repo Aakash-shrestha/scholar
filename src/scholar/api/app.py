@@ -8,6 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from scholar.api.schemas import (
     AskRequest,
     AskResponse,
+    GraphEdgeSchema,
+    GraphNodeSchema,
+    GraphSchema,
     IngestPaperRequest,
     IngestRefPaperRequest,
     IngestRefPaperResponse,
@@ -115,6 +118,23 @@ def add_ref_paper(arxiv_id: str, request: IngestRefPaperRequest):
         skipped=skipped,
         total_found=total_found,
     )
+
+
+@app.get("/graph", response_model=GraphSchema)
+def get_graph():
+    papers = app.state.repo.list_all()
+    citations = app.state.cite_repo.list_all()
+    paper_ids = {p.arxiv_id for p in papers}
+    nodes = [
+        GraphNodeSchema(id=p.arxiv_id, title=p.title, year=p.year, short_citation=p.short_citation)
+        for p in papers
+    ]
+    edges = [
+        GraphEdgeSchema(source=c.source_arxiv_id, target=c.cited_arxiv_id)
+        for c in citations
+        if c.source_arxiv_id in paper_ids and c.cited_arxiv_id in paper_ids
+    ]
+    return GraphSchema(nodes=nodes, edges=edges)
 
 
 @app.post("/ask", response_model=AskResponse)

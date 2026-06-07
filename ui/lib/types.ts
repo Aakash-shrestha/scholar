@@ -15,6 +15,23 @@ export interface AskResponse {
   latency: number;
 }
 
+export interface GraphNode {
+  id: string;
+  title: string;
+  year: number;
+  short_citation: string;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+}
+
+export interface GraphResponse {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
 export interface IngestRefResponse {
   ingest: string[];
   skipped: string[];

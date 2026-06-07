@@ -42,6 +42,23 @@ class IngestRefPaperResponse(BaseModel):
     )
 
 
+class GraphNodeSchema(BaseModel):
+    id: str
+    title: str
+    year: int
+    short_citation: str
+
+
+class GraphEdgeSchema(BaseModel):
+    source: str
+    target: str
+
+
+class GraphSchema(BaseModel):
+    nodes: list[GraphNodeSchema]
+    edges: list[GraphEdgeSchema]
+
+
 # for asking questions
 class AskRequest(BaseModel):
     question: str = Field(description="The question to ask about the paper")

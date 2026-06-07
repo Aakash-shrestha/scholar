@@ -66,3 +66,7 @@ class CitationRepository:
                 .where(Citation.source_arxiv_id == arxiv_id)
             )
             return list(session.scalars(stmt))
+
+    def list_all(self) -> list[Citation]:
+        with Session(self.engine) as session:
+            return list(session.scalars(select(Citation)))

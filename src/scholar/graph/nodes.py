@@ -40,9 +40,8 @@ def classify_node(state: ScholarState) -> dict[str, Any]:
                  multiple works over time (e.g. "How has X evolved from A to B?",
                  "What are the combined implications of X and Y?")
            Question: {question}
-           You MUST pick exactly one. Valid values are: FACTUAL, DEFINITIONAL, COMPARISON, NEGATIVE, SYNTHESIS.
            Respond ONLY with a JSON object like: {{"question_type": "FACTUAL"}}
-           No other text, no combinations, no new categories.
+           No other text.
            """).strip()
     )
     chain = prompt | model | StrOutputParser()
