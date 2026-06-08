@@ -17,7 +17,7 @@ Today, Scholar lets you build a small corpus of arXiv papers and ask grounded, c
 The CLI exposes everything: `scholar ingest`, `scholar list`, `scholar ask`, `scholar eval`, `scholar judge`, `scholar report`.
 
 ## Live Demo
-Frontend: https://scholar-ui-two.vercel.app
+Frontend: https://scholar-research.vercel.app
 Backend: Self-hosted (run locally with uvicorn)
 
 ## Why this exists
@@ -26,8 +26,8 @@ Scholar is built around that workflow — with a reproducible evaluation harness
 to measure quality at each stage.
 ## Tech stack
 
-- **Orchestration:** LangChain (LangGraph coming in Phase 4)
-- **LLM:** Groq Llama-3.3-70B (free tier)
+- **Orchestration:** LangChain, LangGraph
+- **LLM:** Groq Llama-3.3-70B and meta-llama/Llama-4-Scout-17B-16E
 - **Embeddings:** `BAAI/bge-small-en-v1.5` via HuggingFace (local, free)
 - **Reranker:** `BAAI/bge-reranker-base` cross-encoder (local, free)
 - **Vector store:** Chroma (persistent, per-paper)
@@ -58,14 +58,6 @@ uv run scholar ingest arxiv:1706.03762
 uv run scholar ask "What is multi-head attention?" 
 ```
 
-## Roadmap
-
-- [x] Phase 1 — Foundations & first working RAG
-- [x] Phase 2 — Robust paper ingestion (arXiv, corpus database)
-- [x] Phase 3 — Advanced retrieval (hybrid, re-ranking, query rewriting, eval suite)
-- [x] Phase 4 — Multi-agent LangGraph system with parallel research and a critic agent
-- [ ] Phase 5 — Citation graph, contradiction detection, and structured literature reviews
-- [ ] Phase 6 — Web UI, streaming reasoning, and deployment
 
 ## Evaluation
 
