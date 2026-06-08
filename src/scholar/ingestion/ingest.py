@@ -6,7 +6,7 @@ from rich import print
 from rich.rule import Rule
 
 from scholar.corpus.db import Paper
-from scholar.corpus.repository import CitationRepository, CorpusRepository
+from scholar.corpus.repository import CitationRepository, CorpusRepository, ReferenceRepository
 from scholar.ingestion.arxiv_fetch import (
     download_paper,
     enrich_chunks,
@@ -22,7 +22,10 @@ from scholar.retrieval.vectorstore import (
 
 
 def ingest_paper(
-    arxiv_id: str, corpus_repository: CorpusRepository, embeddings: Embeddings
+    arxiv_id: str,
+    corpus_repository: CorpusRepository,
+    reference_repository: ReferenceRepository,
+    embeddings: Embeddings,
 ) -> bool:
     """
     Ingest a single paper. Returns True if ingested, False if already exists.
@@ -45,11 +48,14 @@ def ingest_paper(
         short_citation=paper_metadata.short_citation,
         year=paper_metadata.year,
         abstract=paper_metadata.abstract,
-        pdf_path=str(paper_path),
         persist_dir=str(Path("data/chroma") / arxiv_id),
     )
-
+    references: list[ExtractedReference] = extract_references(paper_path)
+    for reference in references:
+        reference_repository.add(arxiv_id, reference.title, reference.arxiv_id)
     corpus_repository.add(paper_record)
+    paper_path.unlink()  # delete the downloaded pdf to save space
+
     build_abstract_vectorstore(paper_metadata, embeddings)
     print(Rule(f"[bold green]Ingested {paper_metadata.arxiv_id}[/bold green]"))
     print(f"Title: {paper_metadata.title}")
@@ -62,6 +68,7 @@ def ingest_ref_paper(
     arxiv_id: str,
     corpus_repository: CorpusRepository,
     citation_repository: CitationRepository,
+    reference_repository: ReferenceRepository,
     embeddings: Embeddings,
     limit: int = 5,
 ) -> tuple[list[ExtractedReference], list[str], list[str], int]:
@@ -72,9 +79,10 @@ def ingest_ref_paper(
     paper = corpus_repository.get(arxiv_id)
     if paper is None:
         raise ValueError(f"Paper {arxiv_id} not found. Ingest it first.")
-    references: list[ExtractedReference] = extract_references(Path(paper.pdf_path))
+
     ingested_papers: list[str] = []
     skipped_papers: list[str] = []
+    references = reference_repository.get_by_source(arxiv_id)
     for reference in references:
         if len(ingested_papers) >= limit:
             break
@@ -92,7 +100,9 @@ def ingest_ref_paper(
             continue
 
         time.sleep(5)
-        is_ingested = ingest_paper(ref_arxiv_id, corpus_repository, embeddings)
+        is_ingested = ingest_paper(
+            ref_arxiv_id, corpus_repository, reference_repository, embeddings
+        )
 
         if is_ingested:
             ingested_papers.append(ref_arxiv_id)

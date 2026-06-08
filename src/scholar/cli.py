@@ -12,13 +12,15 @@ from rich.table import Table
 
 from scholar.config import settings
 from scholar.corpus.db import Paper, get_engine, init_db
-from scholar.corpus.repository import CitationRepository, CorpusRepository
+from scholar.corpus.repository import CitationRepository, CorpusRepository, ReferenceRepository
 from scholar.evaluation.judge import Score, run_judge
 from scholar.evaluation.report import ComparisonReport, compute_summary, render_markdown
 from scholar.evaluation.runner import load_eval_runs, run_eval
 from scholar.evaluation.schema import load_questions
 from scholar.graph.graph import create_graph
 from scholar.ingestion.arxiv_fetch import (
+    download_paper,
+    fetch_arxiv_metadata,
     search_arxiv_by_title,
 )
 from scholar.ingestion.extract_references import ExtractedReference, extract_references
@@ -66,11 +68,12 @@ def ingest(source: str) -> None:
     engine = get_engine()
     init_db(engine)  # initializes the db if the paper db does not already exists
     corpus_repository = CorpusRepository(engine)
+    reference_repository = ReferenceRepository(engine)
 
     arxiv_id = re.sub(r"^arxiv:", "", source, flags=re.IGNORECASE)  # remove arxiv:
     arxiv_id = re.sub(r"v\d+$", "", arxiv_id)  # remove versioning v1..
     embeddings = get_embeddings()
-    ingest_paper(arxiv_id, corpus_repository, embeddings)
+    ingest_paper(arxiv_id, corpus_repository, reference_repository, embeddings)
 
 
 @app.command(name="list")
@@ -263,10 +266,11 @@ def ingest_references(arxiv_id: str, limit: int = typer.Option(10, "--limit")) -
     init_db(engine)
     corpus_repository = CorpusRepository(engine)
     citation_repository = CitationRepository(engine)
+    reference_repository = ReferenceRepository(engine)
     embeddings = get_embeddings()
 
     references, ingested_papers, skipped_papers, total_found = ingest_ref_paper(
-        arxiv_id, corpus_repository, citation_repository, embeddings, limit
+        arxiv_id, corpus_repository, citation_repository, reference_repository, embeddings, limit
     )
 
     print(Rule("[bold green]Ingestion Summary[/bold green]"))
@@ -276,3 +280,43 @@ def ingest_references(arxiv_id: str, limit: int = typer.Option(10, "--limit")) -
     print(f"Ingested:          {len(ingested_papers)}")
     print(f"Skipped:           {len(skipped_papers)}")
     print(f"Total Found:           {total_found}")
+
+
+@app.command(name="backfill-refs")
+def backfill_references() -> None:
+    """Re-download each ingested paper, extract its references, save to DB, then delete the PDF.
+    Use this once to populate the references table for papers ingested before reference tracking was added."""
+    engine = get_engine()
+    init_db(engine)
+    corpus_repository = CorpusRepository(engine)
+    reference_repository = ReferenceRepository(engine)
+    papers = corpus_repository.list_all()
+
+    console = Console()
+    skipped = 0
+    processed = 0
+
+    for paper in papers:
+        existing = reference_repository.get_by_source(paper.arxiv_id)
+        if existing:
+            console.print(f"[yellow]skip[/yellow] {paper.arxiv_id} — already has {len(existing)} refs")
+            skipped += 1
+            continue
+
+        console.print(f"[cyan]fetching[/cyan] {paper.arxiv_id} …")
+        try:
+            metadata = fetch_arxiv_metadata(paper.arxiv_id)
+            pdf_path = download_paper(metadata)
+            refs = extract_references(pdf_path)
+            pdf_path.unlink()
+            for ref in refs:
+                reference_repository.add(paper.arxiv_id, ref.title, ref.arxiv_id)
+            console.print(f"[green]done[/green]    {paper.arxiv_id} — saved {len(refs)} refs")
+            processed += 1
+        except Exception as e:
+            console.print(f"[red]error[/red]   {paper.arxiv_id}: {e}")
+
+        time.sleep(3)
+
+    print(Rule("[bold green]Backfill complete[/bold green]"))
+    print(f"Processed: {processed}  Skipped: {skipped}")

@@ -2,7 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm.session import Session
 
-from scholar.corpus.db import Citation, Paper
+from scholar.corpus.db import Citation, Paper, Reference
 
 
 class CorpusRepository:
@@ -70,3 +70,34 @@ class CitationRepository:
     def list_all(self) -> list[Citation]:
         with Session(self.engine) as session:
             return list(session.scalars(select(Citation)))
+
+
+class ReferenceRepository:
+    """
+    Reference Repository is the class that controls the access to the references table
+    in the database.
+    """
+
+    def __init__(self, engine: Engine) -> None:
+        """constructor initializes the repository with a database engine"""
+        self.engine = engine
+
+    def add(self, source_arxiv_id: str, title: str, arxiv_id: str | None) -> None:
+        if source_arxiv_id is None or title is None:
+            raise ValueError("source_arxiv_id and title cannot be None")
+
+        reference = Reference(
+            source_arxiv_id=source_arxiv_id,
+            title=title,
+            arxiv_id=arxiv_id,
+        )
+        with Session(self.engine) as session:
+            session.merge(reference)
+            session.commit()
+
+    def get_by_source(self, source_arxiv_id: str) -> list[Reference]:
+        if source_arxiv_id is None:
+            raise ValueError("source_arxiv_id cannot be None")
+        with Session(self.engine) as session:
+            stmt = select(Reference).where(Reference.source_arxiv_id == source_arxiv_id)
+            return list(session.scalars(stmt))

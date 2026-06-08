@@ -4,10 +4,10 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from starlette.responses import StreamingResponse
+from starlette.responses import Response, StreamingResponse
 
 from scholar.api.schemas import (
     AskRequest,
@@ -21,7 +21,7 @@ from scholar.api.schemas import (
     PaperResponse,
 )
 from scholar.corpus.db import Paper, get_engine, init_db
-from scholar.corpus.repository import CitationRepository, CorpusRepository
+from scholar.corpus.repository import CitationRepository, CorpusRepository, ReferenceRepository
 from scholar.graph.graph import create_graph
 from scholar.ingestion.ingest import ingest_paper, ingest_ref_paper
 from scholar.retrieval.vectorstore import get_embeddings
@@ -33,6 +33,7 @@ async def lifespan(app: FastAPI):
     init_db(engine)
     app.state.repo = CorpusRepository(engine)
     app.state.cite_repo = CitationRepository(engine)
+    app.state.ref_repo = ReferenceRepository(engine)
     app.state.embeddings = get_embeddings()
     try:
         app.state.graph = create_graph()
@@ -78,7 +79,7 @@ def add_paper(request: IngestPaperRequest):
         raise HTTPException(
             status_code=400, detail=f"Paper with arXiv ID {arxiv_id} already exists"
         )
-    is_ingested = ingest_paper(arxiv_id, app.state.repo, app.state.embeddings)
+    is_ingested = ingest_paper(arxiv_id, app.state.repo, app.state.ref_repo, app.state.embeddings)
     if is_ingested:
         app.state.graph = create_graph()
         paper = app.state.repo.get(arxiv_id)
@@ -114,7 +115,7 @@ def add_ref_paper(arxiv_id: str, request: IngestRefPaperRequest):
         raise HTTPException(status_code=404, detail=f"Paper {arxiv_id} not found")
 
     references, ingested, skipped, total_found = ingest_ref_paper(
-        arxiv_id, app.state.repo, app.state.cite_repo, app.state.embeddings, request.limit
+        arxiv_id, app.state.repo, app.state.cite_repo, app.state.ref_repo, app.state.embeddings, request.limit
     )
 
     return IngestRefPaperResponse(
@@ -211,11 +212,7 @@ async def ask_stream(request: AskRequest):
 
 
 @app.get("/papers/{arxiv_id}/pdf")
-def get_paper_pdf(arxiv_id: str):
-    paper = app.state.repo.get(arxiv_id)
-    if paper is None:
-        raise HTTPException(status_code=404, detail=f"Paper with arXiv ID {arxiv_id} not found")
-    path = Path(paper.pdf_path)
-    if not path.exists():
-        raise HTTPException(status_code=404, detail=f"PDF for paper {arxiv_id} not found")
-    return FileResponse(path, media_type="application/pdf")
+async def get_paper_pdf(arxiv_id: str):
+    async with httpx.AsyncClient() as client:
+        r = await client.get(f"https://arxiv.org/pdf/{arxiv_id}", follow_redirects=True)
+    return Response(content=r.content, media_type="application/pdf")
