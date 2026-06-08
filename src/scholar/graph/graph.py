@@ -13,8 +13,9 @@ from scholar.graph.nodes import (
     retrieve_hybrid_node,
     retrieve_multi_node,
 )
+from scholar.config import settings
 from scholar.graph.state import ScholarState
-from scholar.retrieval.vectorstore import get_embeddings, load_all_vectorstore
+from scholar.retrieval.vectorstore import get_embeddings, load_all_vectorstore, load_existing_vectorstore
 
 
 def route_question(state: ScholarState) -> str:
@@ -40,11 +41,14 @@ def create_graph():
 
     # get embeddings
     embeddings = get_embeddings()
-    # add alll the node in the graphsss
+
+    # load abstracts store once — reused on every query instead of re-opening each time
+    abstracts_store = load_existing_vectorstore(settings.chroma_dir / "abstracts", embeddings)
+
     graph.add_node("classify", classify_node)
     graph.add_node(
         "relevant_papers",
-        partial(find_relevant_paper_node, stores=stores, embeddings=embeddings),
+        partial(find_relevant_paper_node, stores=stores, embeddings=embeddings, abstracts_store=abstracts_store),
     )
     graph.add_node("retrieve_baseline", partial(retrieve_baseline_node, stores=stores))
     graph.add_node("retrieve_hybrid", partial(retrieve_hybrid_node, stores=stores, chunks=chunks))

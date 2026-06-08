@@ -1,26 +1,32 @@
 "use client";
 
 import { api } from "@/lib/api";
-import { Paper } from "@/lib/types";
-import { useParams } from "next/navigation";
+import { Paper, ReferenceType } from "@/lib/types";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, BookOpen, ExternalLink, Library } from "lucide-react";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import {
+  ArrowLeft,
+  BookOpen,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  Library,
+} from "lucide-react";
+import { toast } from "sonner";
 
 export default function SinglePaper() {
   const [singlePaper, setSinglePaper] = useState<Paper | null>(null);
   const [limit, setLimit] = useState<number>(3);
   const [ingesting, setIngesting] = useState(false);
-  const [refMessage, setRefMessage] = useState<{
-    ok: boolean;
-    text: string;
-  } | null>(null);
+  const [showRefs, setShowRefs] = useState(false);
+  const [refs, setRefs] = useState<ReferenceType[]>([]);
+  const [refsLoading, setRefsLoading] = useState(false);
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const { arxiv_id } = useParams();
 
   useEffect(() => {
@@ -28,22 +34,50 @@ export default function SinglePaper() {
   }, [arxiv_id]);
 
   async function ingestReference() {
-    setRefMessage(null);
     setIngesting(true);
+    const toastId = toast.loading("Ingesting references…");
     try {
       const data = await api.ingestRefs(arxiv_id as string, limit);
-      setRefMessage({
-        ok: true,
-        text: `Ingested ${data.ingest.length} new · skipped ${data.skipped.length} already known · ${data.total_found} total references found.`,
-      });
+      toast.success(
+        `Ingested ${data.ingest.length} new · skipped ${data.skipped.length} already known · ${data.total_found} total found.`,
+        { id: toastId },
+      );
     } catch (e: unknown) {
-      setRefMessage({
-        ok: false,
-        text: e instanceof Error ? e.message : "Ingest failed.",
+      toast.error(e instanceof Error ? e.message : "Ingest failed.", {
+        id: toastId,
       });
     } finally {
       setIngesting(false);
     }
+  }
+
+  async function loadReferences() {
+    if (showRefs) {
+      setShowRefs(false);
+      return;
+    }
+    setShowRefs(true);
+    if (refs.length > 0) return; // already loaded
+    setRefsLoading(true);
+    try {
+      const data = await api.getReferences(arxiv_id as string);
+      setRefs(data);
+    } catch (e: unknown) {
+      toast.error(
+        e instanceof Error ? e.message : "Failed to load references.",
+      );
+      setShowRefs(false);
+    } finally {
+      setRefsLoading(false);
+    }
+  }
+
+  function handleRefIngested(ingestedId: string) {
+    setRefs((prev) =>
+      prev.map((r) =>
+        r.arxiv_id === ingestedId ? { ...r, is_ingested: true } : r,
+      ),
+    );
   }
 
   return (
@@ -70,7 +104,7 @@ export default function SinglePaper() {
       {/* Body */}
       <div className="flex min-h-0 flex-1">
         {/* ── Left panel ── */}
-        <div className="flex w-[360px] shrink-0 flex-col gap-6 overflow-y-auto border-r border-border p-6">
+        <div className="flex w-120 shrink-0 flex-col gap-6 overflow-y-auto border-r border-border p-6">
           {!singlePaper ? (
             <div className="space-y-4">
               <div className="flex gap-2">
@@ -158,18 +192,63 @@ export default function SinglePaper() {
                       {ingesting ? "Ingesting…" : "Ingest References"}
                     </Button>
                   </div>
-                  {refMessage && (
-                    <p
-                      className={`text-xs leading-relaxed ${
-                        refMessage.ok
-                          ? "text-green-600 dark:text-green-400"
-                          : "text-destructive"
-                      }`}
-                    >
-                      {refMessage.text}
-                    </p>
-                  )}
                 </div>
+
+                {/* Reference list */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-between text-xs"
+                  onClick={loadReferences}
+                >
+                  <span>
+                    {showRefs ? "Hide reference list" : "View reference list"}
+                  </span>
+                  {showRefs ? (
+                    <ChevronUp className="size-3.5" />
+                  ) : (
+                    <ChevronDown className="size-3.5" />
+                  )}
+                </Button>
+
+                {showRefs && (
+                  <div className="border border-border">
+                    {refsLoading ? (
+                      <div className="space-y-2 p-3">
+                        {[...Array(4)].map((_, i) => (
+                          <Skeleton key={i} className="h-8 w-full" />
+                        ))}
+                        <p className="text-[10px] text-muted-foreground text-center pt-1">
+                          Resolving arXiv IDs — first load may take a moment…
+                        </p>
+                      </div>
+                    ) : refs.length === 0 ? (
+                      <p className="p-3 text-xs text-muted-foreground">
+                        No arXiv references found.
+                      </p>
+                    ) : (
+                      <div>
+                        <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
+                          <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                            Title
+                          </span>
+                          <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                            {refs.filter((r) => r.is_ingested).length}/
+                            {refs.length} ingested
+                          </span>
+                        </div>
+                        {refs.map((ref) => (
+                          <RefRow
+                            key={ref.title}
+                            item={ref}
+                            onIngested={handleRefIngested}
+                            onPreview={setPreviewId}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Ingested timestamp */}
@@ -177,7 +256,7 @@ export default function SinglePaper() {
                 Added to library{" "}
                 {new Date(singlePaper.ingested_at).toLocaleDateString(
                   undefined,
-                  { year: "numeric", month: "long", day: "numeric" }
+                  { year: "numeric", month: "long", day: "numeric" },
                 )}
               </p>
             </>
@@ -187,31 +266,124 @@ export default function SinglePaper() {
         {/* ── Right panel — PDF viewer ── */}
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-3">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <BookOpen className="size-3.5 text-muted-foreground" />
-              Full Paper
+            <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
+              <BookOpen className="size-3.5 shrink-0 text-muted-foreground" />
+              {previewId ? (
+                <span className="truncate text-sm">
+                  {refs.find((r) => r.arxiv_id === previewId)?.title ??
+                    previewId}
+                </span>
+              ) : (
+                "Full Paper"
+              )}
             </div>
-            {singlePaper && (
-              <a
-                href={`/api/pdf/${singlePaper.arxiv_id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-              >
-                Open in new tab
-                <ExternalLink className="size-3" />
-              </a>
-            )}
+            <div className="flex shrink-0 items-center gap-3">
+              {previewId && (
+                <button
+                  onClick={() => setPreviewId(null)}
+                  className="inline-flex items-center gap-1.5 text-xs text-primary transition-colors hover:text-primary/80"
+                >
+                  <ArrowLeft className="size-3" />
+                  Back to original Paper:{" "}
+                  <span className="font-bold">{singlePaper?.title}</span>
+                </button>
+              )}
+              {singlePaper && (
+                <a
+                  href={`/api/pdf/${previewId ?? singlePaper.arxiv_id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  Open in new tab
+                  <ExternalLink className="size-3" />
+                </a>
+              )}
+            </div>
           </div>
           <div className="min-h-0 flex-1 bg-muted/10">
             <iframe
-              src={`/api/pdf/${arxiv_id}`}
+              src={`/api/pdf/${previewId ?? arxiv_id}`}
               className="h-full w-full"
               allow="fullscreen"
             />
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function RefRow({
+  item,
+  onIngested,
+  onPreview,
+}: {
+  item: ReferenceType;
+  onIngested: (id: string) => void;
+  onPreview: (id: string) => void;
+}) {
+  const [ingesting, setIngesting] = useState(false);
+  const router = useRouter();
+
+  async function handleIngest(e: React.MouseEvent) {
+    e.stopPropagation();
+    setIngesting(true);
+    const toastId = toast.loading(`Ingesting ${item.arxiv_id}…`);
+    try {
+      await api.ingestPaper(item.arxiv_id);
+      toast.success("Ingested successfully.", { id: toastId });
+      onIngested(item.arxiv_id);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed.", {
+        id: toastId,
+      });
+    } finally {
+      setIngesting(false);
+    }
+  }
+
+  return (
+    <div
+      onClick={() =>
+        item.is_ingested && router.push(`/papers/${item.arxiv_id}`)
+      }
+      className={`flex items-center gap-2 border-b border-border px-3 py-2.5 last:border-0 ${
+        item.is_ingested ? "cursor-pointer hover:bg-muted/40" : "cursor-default"
+      }`}
+    >
+      <div className="min-w-0 flex-1">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onPreview(item.arxiv_id);
+          }}
+          className="line-clamp-2 text-left text-xs leading-relaxed hover:underline hover:text-foreground transition-colors"
+        >
+          {item.title}
+        </button>
+        <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+          {item.arxiv_id}
+        </p>
+      </div>
+      {item.is_ingested ? (
+        <Badge
+          variant="secondary"
+          className="shrink-0 text-[10px] text-green-600 dark:text-green-400"
+        >
+          Ingested
+        </Badge>
+      ) : (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleIngest}
+          disabled={ingesting}
+          className="shrink-0 h-6 text-[10px] px-2"
+        >
+          {ingesting ? "…" : "Ingest"}
+        </Button>
+      )}
     </div>
   );
 }

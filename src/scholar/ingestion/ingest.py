@@ -1,3 +1,5 @@
+import gc
+import re
 import time
 from pathlib import Path
 
@@ -5,7 +7,7 @@ from langchain_core.embeddings import Embeddings
 from rich import print
 from rich.rule import Rule
 
-from scholar.corpus.db import Paper
+from scholar.corpus.db import Paper, Reference
 from scholar.corpus.repository import CitationRepository, CorpusRepository, ReferenceRepository
 from scholar.ingestion.arxiv_fetch import (
     download_paper,
@@ -30,6 +32,7 @@ def ingest_paper(
     """
     Ingest a single paper. Returns True if ingested, False if already exists.
     """
+    arxiv_id = re.sub(r"v\d+$", "", arxiv_id)  # normalize: "1412.6980v9" → "1412.6980"
     if corpus_repository.get(arxiv_id) is not None:
         print(f"[bold yellow]Paper {arxiv_id} already ingested. Skipping ingestion.[/bold yellow]")
         return False
@@ -42,6 +45,7 @@ def ingest_paper(
     persistent_dir = Path("data/chroma") / arxiv_id
 
     build_vectorstore(enriched_chunks, persistent_dir, embeddings)
+    gc.collect()  # release Chroma PersistentClient before next paper
     paper_record = Paper(
         arxiv_id=arxiv_id,
         title=paper_metadata.title,
@@ -52,11 +56,13 @@ def ingest_paper(
     )
     references: list[ExtractedReference] = extract_references(paper_path)
     for reference in references:
-        reference_repository.add(arxiv_id, reference.title, reference.arxiv_id)
+        clean_id = re.sub(r"v\d+$", "", reference.arxiv_id) if reference.arxiv_id else None
+        reference_repository.add(arxiv_id, reference.title, clean_id)
     corpus_repository.add(paper_record)
     paper_path.unlink()  # delete the downloaded pdf to save space
 
     build_abstract_vectorstore(paper_metadata, embeddings)
+    gc.collect()
     print(Rule(f"[bold green]Ingested {paper_metadata.arxiv_id}[/bold green]"))
     print(f"Title: {paper_metadata.title}")
     print(f"Citation: {paper_metadata.short_citation}")
@@ -71,7 +77,7 @@ def ingest_ref_paper(
     reference_repository: ReferenceRepository,
     embeddings: Embeddings,
     limit: int = 5,
-) -> tuple[list[ExtractedReference], list[str], list[str], int]:
+) -> tuple[list[Reference], list[str], list[str], int]:
     """
     Extract and ingest references for a paper.
     Returns (references, ingested, skipped, total_found).
@@ -79,6 +85,8 @@ def ingest_ref_paper(
     paper = corpus_repository.get(arxiv_id)
     if paper is None:
         raise ValueError(f"Paper {arxiv_id} not found. Ingest it first.")
+
+    ingested_ids: set[str] = {p.arxiv_id for p in corpus_repository.list_all()}
 
     ingested_papers: list[str] = []
     skipped_papers: list[str] = []
@@ -93,9 +101,10 @@ def ingest_ref_paper(
                 continue
             ref_arxiv_id = result.arxiv_id
         else:
-            ref_arxiv_id = reference.arxiv_id
-        if corpus_repository.get(ref_arxiv_id) is not None:
-            citation_repository.add(arxiv_id, ref_arxiv_id)  # add already ingested papers too
+            ref_arxiv_id = re.sub(r"v\d+$", "", reference.arxiv_id)  # strip version from stored ID
+
+        if ref_arxiv_id in ingested_ids:
+            citation_repository.add(arxiv_id, ref_arxiv_id)
             skipped_papers.append(ref_arxiv_id)
             continue
 
@@ -106,6 +115,7 @@ def ingest_ref_paper(
 
         if is_ingested:
             ingested_papers.append(ref_arxiv_id)
+            ingested_ids.add(ref_arxiv_id)  # keep set current for the rest of the loop
             citation_repository.add(arxiv_id, ref_arxiv_id)
         else:
             skipped_papers.append(ref_arxiv_id)

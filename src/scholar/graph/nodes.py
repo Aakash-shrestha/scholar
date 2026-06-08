@@ -10,7 +10,6 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel
 
-from scholar.config import settings
 from scholar.evaluation.schema import QuestionType
 from scholar.graph.state import ScholarState
 from scholar.models import get_chat_model
@@ -59,16 +58,16 @@ def classify_node(state: ScholarState) -> dict[str, Any]:
 
 
 def find_relevant_paper_node(
-    state: ScholarState, stores: dict[str, Chroma], embeddings: Embeddings
+    state: ScholarState,
+    stores: dict[str, Chroma],
+    embeddings: Embeddings,
+    abstracts_store: Chroma | None = None,
 ) -> dict[str, Any]:
-    if (state["question_type"]) in (QuestionType.DEFINITIONAL, QuestionType.SYNTHESIS):
+    if state["question_type"] in (QuestionType.DEFINITIONAL, QuestionType.SYNTHESIS):
         return {"relevant_paper_ids": list(stores.keys())}
-    collection = Chroma(
-        persist_directory=str(settings.chroma_dir / "abstracts"),
-        embedding_function=embeddings,
-    )
-    query = state["question"]
-    results = collection.similarity_search(query, k=3)
+    if abstracts_store is None:
+        return {"relevant_paper_ids": list(stores.keys())}
+    results = abstracts_store.similarity_search(state["question"], k=3)
     arxiv_ids = [doc.metadata["arxiv_id"] for doc in results]
     return {"relevant_paper_ids": arxiv_ids}
 

@@ -7,11 +7,17 @@ export interface Paper {
   ingested_at: string;
 }
 
+export interface RetrievedPaper {
+  arxiv_id: string;
+  title: string;
+  abstract: string;
+}
+
 export interface AskResponse {
   question: string;
   answer: string;
   question_type: string;
-  retrieved_arxiv_ids: string[];
+  retrieved_papers: RetrievedPaper[];
   latency: number;
 }
 
@@ -46,8 +52,14 @@ export type StreamTokenEvent = {
 export type StreamDoneEvent = {
   type: "done";
   question_type: string;
-  retrieved_arxiv_ids: string[];
+  retrieved_papers: RetrievedPaper[];
   latency: number;
 };
 
 export type StreamEvent = StreamTokenEvent | StreamDoneEvent;
+
+export interface ReferenceType {
+  title: string;
+  arxiv_id: string;
+  is_ingested: boolean;
+}

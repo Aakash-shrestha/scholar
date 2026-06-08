@@ -72,3 +72,11 @@ class AskResponse(BaseModel):
     )
     question_type: QuestionType = Field(description="The type of the question that was asked")
     latency: int = Field(description="The latency in milliseconds to answer the question")
+
+
+class ReferenceItem(BaseModel):
+    title: str = Field(description="The title of the reference paper")
+    arxiv_id: str = Field(description="The arXiv ID of the reference paper")
+    is_ingested: bool = Field(
+        description="Whether the reference paper is already ingested in the database"
+    )

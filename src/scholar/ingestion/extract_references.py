@@ -1,9 +1,9 @@
 import re
 from pathlib import Path
 from textwrap import dedent
+from typing import cast
 
 import fitz
-from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel
 
@@ -18,18 +18,22 @@ class ExtractedReference(BaseModel):
     doi: str | None
 
 
+class ReferenceList(BaseModel):
+    references: list[ExtractedReference]
+
+
 def find_reference_section(original_paper: Path) -> int:
     """
     finds the starting page of the reference section from the original research paper
     """
-    docs = fitz.open(original_paper)
     pattern = re.compile(
         r"^\s*(references|bibliography|works cited)\s*$", re.IGNORECASE | re.MULTILINE
     )
-    for page_num in range(len(docs) - 1, -1, -1):
-        text = str(docs[page_num].get_text("text"))
-        if pattern.search(text):
-            return page_num
+    with fitz.open(original_paper) as docs:
+        for page_num in range(len(docs) - 1, -1, -1):
+            text = str(docs[page_num].get_text("text"))
+            if pattern.search(text):
+                return page_num
     return -1
 
 
@@ -50,23 +54,16 @@ def extract_references(pdf_path: Path) -> list[ExtractedReference]:
         """).strip()
     )
 
-    model = get_chat_model(fast=True, pro=False)
+    model = get_chat_model(provider="gemini", fast=False, pro=False)
     reference_page_start = find_reference_section(pdf_path)
     if reference_page_start == -1:
-        raise ValueError("Could not find reference section in the paper.")
+        return []
 
     reference_text: list[str] = []
-    paper_pages = fitz.open(pdf_path)
-    for page_num in range(reference_page_start, len(paper_pages)):
-        reference_text.append(str(paper_pages[page_num].get_text("text")))
+    with fitz.open(pdf_path) as paper_pages:
+        for page_num in range(reference_page_start, len(paper_pages)):
+            reference_text.append(str(paper_pages[page_num].get_text("text")))
 
-    model_chain = prompt | model | JsonOutputParser()
-    result = model_chain.invoke({"references_text": "\n".join(reference_text)})
-    references = []
-    for item in result:
-        try:
-            references.append(ExtractedReference(**item))
-        except Exception:
-            continue
-
-    return references
+    structured_model = model.with_structured_output(ReferenceList)
+    result = cast(ReferenceList, (prompt | structured_model).invoke({"references_text": "\n".join(reference_text)}))
+    return result.references if result else []

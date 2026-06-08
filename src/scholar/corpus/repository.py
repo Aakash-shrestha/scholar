@@ -101,3 +101,12 @@ class ReferenceRepository:
         with Session(self.engine) as session:
             stmt = select(Reference).where(Reference.source_arxiv_id == source_arxiv_id)
             return list(session.scalars(stmt))
+
+    def update_arxiv_id(self, source_arxiv_id: str, title: str, arxiv_id: str) -> None:
+        if source_arxiv_id is None:
+            raise ValueError("source_arxiv_id cannot be None")
+        with Session(self.engine) as session:
+            ref = session.get(Reference, (source_arxiv_id, title))
+            if ref:
+                ref.arxiv_id = arxiv_id
+                session.commit()

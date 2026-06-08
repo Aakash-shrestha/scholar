@@ -46,6 +46,11 @@ export const api = {
       body: JSON.stringify({ limit }),
     }).then(parseResponse),
 
+  getReferences: (arxiv_id: string) =>
+    fetch(`${API_BASE}/papers/${arxiv_id}/references`, {
+      headers: HEADERS,
+    }).then(parseResponse),
+
   async *askStream(question: string): AsyncGenerator<StreamEvent> {
     const res = await fetch(`${API_BASE}/ask/stream`, {
       method: "POST",

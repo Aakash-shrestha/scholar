@@ -4,6 +4,7 @@ import "./globals.css";
 import "katex/dist/katex.min.css";
 import { AppSidebar } from "@/components/AppSidebar";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
+import { Toaster } from "@/components/ui/sonner";
 
 const jakartaSans = Plus_Jakarta_Sans({
   variable: "--font-sans",
@@ -31,13 +32,14 @@ export default function RootLayout({
       lang="en"
       className={`${jakartaSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="bg-background text-foreground">
+      <body className="bg-background text-foreground" suppressHydrationWarning>
         <SidebarProvider className="h-svh">
           <AppSidebar />
           <SidebarInset className="min-w-0 overflow-y-auto">
             {children}
           </SidebarInset>
         </SidebarProvider>
+        <Toaster richColors position="top-right" />
       </body>
     </html>
   );

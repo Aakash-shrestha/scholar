@@ -12,7 +12,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
-import type { AskResponse } from "@/lib/types";
+import type { AskResponse, RetrievedPaper } from "@/lib/types";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 
 type Message = {
   id: number;
@@ -102,7 +107,7 @@ export default function Home() {
             question,
             answer: fullAnswer,
             question_type: event.question_type,
-            retrieved_arxiv_ids: event.retrieved_arxiv_ids,
+            retrieved_papers: event.retrieved_papers ?? [],
             latency: event.latency,
           };
           setMessages((prev) => [
@@ -287,23 +292,14 @@ function MessageBlock({ message }: { message: Message }) {
         </div>
 
         {/* Citations */}
-        {response.retrieved_arxiv_ids.length > 0 && (
+        {response.retrieved_papers.length > 0 && (
           <div className="pt-3 border-t border-border space-y-2.5">
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
               Sources
             </p>
             <div className="flex flex-wrap gap-1.5">
-              {response.retrieved_arxiv_ids.map((id) => (
-                <a
-                  key={id}
-                  href={`https://arxiv.org/abs/${id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 border border-border px-2.5 py-1 text-[11px] text-muted-foreground font-normal hover:border-foreground/25 hover:text-foreground transition-colors"
-                >
-                  <FileText className="size-3" />
-                  {id}
-                </a>
+              {response.retrieved_papers.map((paper) => (
+                <CitationCard key={paper.arxiv_id} paper={paper} />
               ))}
             </div>
           </div>
@@ -313,6 +309,27 @@ function MessageBlock({ message }: { message: Message }) {
   );
 }
 
+function CitationCard({ paper }: { paper: RetrievedPaper }) {
+  return (
+    <HoverCard>
+      <HoverCardTrigger>
+        <a
+          href={`/papers/${paper.arxiv_id}`}
+          className="inline-flex items-center gap-1.5 border border-border px-2.5 py-1 text-[11px] text-muted-foreground font-normal hover:border-foreground/25 hover:text-foreground transition-colors"
+        >
+          <FileText className="size-3" />
+          {paper.arxiv_id}
+        </a>
+      </HoverCardTrigger>
+      <HoverCardContent className="w-80">
+        <p className="font-semibold text-sm">{paper.title}</p>
+        <p className="text-xs text-muted-foreground mt-1 line-clamp-4">
+          {paper.abstract}
+        </p>
+      </HoverCardContent>
+    </HoverCard>
+  );
+}
 function EmptyState({ onSuggest }: { onSuggest: (q: string) => void }) {
   return (
     <div className="flex flex-col items-center justify-center min-h-[52vh] gap-8 text-center">

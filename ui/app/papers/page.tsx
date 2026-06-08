@@ -17,15 +17,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import { toast } from "sonner";
 
 export default function Papers() {
   const [papers, setPapers] = useState<Paper[]>([]);
   const [arxivId, setArxivId] = useState<string>("");
   const [loading, setLoading] = useState(true);
-  const [ingestMessage, setIngestMessage] = useState<{
-    ok: boolean;
-    text: string;
-  } | null>(null);
+  const [ingesting, setIngesting] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -36,17 +34,17 @@ export default function Papers() {
   }, []);
 
   async function handleIngest() {
-    setIngestMessage(null);
+    setIngesting(true);
+    const toastId = toast.loading(`Ingesting ${arxivId}…`);
     try {
       const data = await api.ingestPaper(arxivId);
       setPapers((prev) => [...prev, data]);
       setArxivId("");
-      setIngestMessage({ ok: true, text: `"${data.title}" ingested successfully.` });
+      toast.success(`"${data.title}" added to library.`, { id: toastId });
     } catch (e: unknown) {
-      setIngestMessage({
-        ok: false,
-        text: e instanceof Error ? e.message : "Ingest failed.",
-      });
+      toast.error(e instanceof Error ? e.message : "Ingest failed.", { id: toastId });
+    } finally {
+      setIngesting(false);
     }
   }
 
@@ -67,7 +65,7 @@ export default function Papers() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6 max-w-7xl mx-auto w-full">
+    <div className="flex flex-col gap-4 p-6 max-w-7xl mx-auto w-full">
       {/* Page header */}
       <div className="flex items-start justify-between gap-6">
         <div>
@@ -84,25 +82,15 @@ export default function Papers() {
               value={arxivId}
               onChange={(e) => {
                 setArxivId(e.target.value);
-                setIngestMessage(null);
               }}
               onKeyDown={(e) => e.key === "Enter" && arxivId.trim() && handleIngest()}
               placeholder="e.g. 2301.00001"
               className="w-52"
             />
-            <Button onClick={handleIngest} disabled={!arxivId.trim()}>
-              Add Paper
+            <Button onClick={handleIngest} disabled={!arxivId.trim() || ingesting}>
+              {ingesting ? "Ingesting…" : "Add Paper"}
             </Button>
           </div>
-          {ingestMessage && (
-            <p
-              className={`text-xs ${
-                ingestMessage.ok ? "text-green-600 dark:text-green-400" : "text-destructive"
-              }`}
-            >
-              {ingestMessage.text}
-            </p>
-          )}
         </div>
       </div>
 

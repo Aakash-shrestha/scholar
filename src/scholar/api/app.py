@@ -1,8 +1,17 @@
+import gc
 import json
 import re
+import resource
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+# Raise the soft FD limit to avoid "Too many open files" with many papers
+try:
+    _soft, _hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (min(65536, _hard), _hard))
+except Exception:
+    pass
 
 import httpx
 from fastapi import FastAPI, HTTPException
@@ -19,10 +28,12 @@ from scholar.api.schemas import (
     IngestRefPaperRequest,
     IngestRefPaperResponse,
     PaperResponse,
+    ReferenceItem,
 )
 from scholar.corpus.db import Paper, get_engine, init_db
 from scholar.corpus.repository import CitationRepository, CorpusRepository, ReferenceRepository
 from scholar.graph.graph import create_graph
+from scholar.ingestion.arxiv_fetch import search_arxiv_by_title
 from scholar.ingestion.ingest import ingest_paper, ingest_ref_paper
 from scholar.retrieval.vectorstore import get_embeddings
 
@@ -81,6 +92,7 @@ def add_paper(request: IngestPaperRequest):
         )
     is_ingested = ingest_paper(arxiv_id, app.state.repo, app.state.ref_repo, app.state.embeddings)
     if is_ingested:
+        gc.collect()  # release old Chroma stores before loading new graph
         app.state.graph = create_graph()
         paper = app.state.repo.get(arxiv_id)
         return PaperResponse(
@@ -115,7 +127,12 @@ def add_ref_paper(arxiv_id: str, request: IngestRefPaperRequest):
         raise HTTPException(status_code=404, detail=f"Paper {arxiv_id} not found")
 
     references, ingested, skipped, total_found = ingest_ref_paper(
-        arxiv_id, app.state.repo, app.state.cite_repo, app.state.ref_repo, app.state.embeddings, request.limit
+        arxiv_id,
+        app.state.repo,
+        app.state.cite_repo,
+        app.state.ref_repo,
+        app.state.embeddings,
+        request.limit,
     )
 
     return IngestRefPaperResponse(
@@ -206,7 +223,12 @@ async def ask_stream(request: AskRequest):
 
         latency = int((time.perf_counter() - start) * 1000)
         qt = getattr(question_type, "value", question_type) or "factual"
-        yield f"data: {json.dumps({'type': 'done', 'question_type': qt, 'retrieved_arxiv_ids': relevant_paper_ids, 'latency': latency})}\n\n"
+        retrieved_papers = []
+        for pid in relevant_paper_ids:
+            p = app.state.repo.get(pid)
+            if p:
+                retrieved_papers.append({"arxiv_id": pid, "title": p.title, "abstract": p.abstract})
+        yield f"data: {json.dumps({'type': 'done', 'question_type': qt, 'retrieved_papers': retrieved_papers, 'latency': latency})}\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
 
@@ -216,3 +238,26 @@ async def get_paper_pdf(arxiv_id: str):
     async with httpx.AsyncClient() as client:
         r = await client.get(f"https://arxiv.org/pdf/{arxiv_id}", follow_redirects=True)
     return Response(content=r.content, media_type="application/pdf")
+
+
+@app.get("/papers/{arxiv_id}/references", response_model=list[ReferenceItem])
+def get_paper_references(arxiv_id: str):
+    if app.state.repo.get(arxiv_id) is None:
+        raise HTTPException(status_code=404, detail=f"Paper {arxiv_id} not found")
+    refs = app.state.ref_repo.get_by_source(arxiv_id)
+    result = []
+
+    for ref in refs:
+        ref_id = ref.arxiv_id
+        if ref_id is None:
+            found = search_arxiv_by_title(ref.title)
+            if found is None:
+                continue  # not available in arxiv
+            ref_id = found.arxiv_id
+        ref_id = re.sub(r"v\d+$", "", ref_id)  # strip version suffix (e.g. 1412.6980v9 → 1412.6980)
+        if ref.arxiv_id != ref_id:
+            app.state.ref_repo.update_arxiv_id(arxiv_id, ref.title, ref_id)
+        is_ingested = app.state.repo.get(ref_id) is not None
+        result.append(ReferenceItem(title=ref.title, arxiv_id=ref_id, is_ingested=is_ingested))
+
+    return result
