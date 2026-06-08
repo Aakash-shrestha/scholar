@@ -2,9 +2,11 @@ import json
 import re
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from starlette.responses import StreamingResponse
 
 from scholar.api.schemas import (
@@ -206,3 +208,14 @@ async def ask_stream(request: AskRequest):
         yield f"data: {json.dumps({'type': 'done', 'question_type': qt, 'retrieved_arxiv_ids': relevant_paper_ids, 'latency': latency})}\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@app.get("/papers/{arxiv_id}/pdf")
+def get_paper_pdf(arxiv_id: str):
+    paper = app.state.repo.get(arxiv_id)
+    if paper is None:
+        raise HTTPException(status_code=404, detail=f"Paper with arXiv ID {arxiv_id} not found")
+    path = Path(paper.pdf_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"PDF for paper {arxiv_id} not found")
+    return FileResponse(path, media_type="application/pdf")
