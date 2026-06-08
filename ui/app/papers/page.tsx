@@ -113,10 +113,10 @@ export default function Papers() {
         </p>
       ) : (
         <>
-          <div className="rounded-lg border border-border overflow-hidden">
+          <div className="rounded-lg border border-border">
             <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/50 hover:bg-muted/50">
+              <TableHeader className="sticky top-0 z-10 bg-muted/80 backdrop-blur-sm">
+                <TableRow className="hover:bg-transparent border-b border-border">
                   <TableHead className="w-[42%] pl-4">Title</TableHead>
                   <TableHead className="w-[28%]">Citation</TableHead>
                   <TableHead className="w-[7%]">Year</TableHead>
@@ -182,9 +182,9 @@ export default function Papers() {
                         <TableRow className="bg-muted/30 hover:bg-muted/30">
                           <TableCell
                             colSpan={6}
-                            className="whitespace-normal px-6 py-4 align-top"
+                            className="!whitespace-normal break-words px-6 py-4 align-top"
                           >
-                            <p className="text-sm text-muted-foreground leading-relaxed max-w-4xl">
+                            <p className="text-sm text-muted-foreground leading-relaxed w-full text-justify">
                               <span className="font-semibold text-foreground mr-2">Abstract</span>
                               {paper.abstract}
                             </p>
