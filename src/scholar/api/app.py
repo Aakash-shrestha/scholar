@@ -1,9 +1,11 @@
+import json
 import re
 import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import StreamingResponse
 
 from scholar.api.schemas import (
     AskRequest,
@@ -163,3 +165,44 @@ def ask_question(request: AskRequest):
         question_type=result["question_type"],
         latency=latency_ms,
     )
+
+
+@app.post("/ask/stream")
+async def ask_stream(request: AskRequest):
+    if app.state.graph is None:
+        raise HTTPException(status_code=503, detail="No papers ingested yet. Ingest a paper first.")
+
+    # input state for graph
+    input_state = {
+        "question": request.question,
+        "question_type": None,
+        "retrieved_docs": [],
+        "sub_questions": None,
+        "sub_questions_docs": None,
+        "generated_answer": None,
+        "relevant_paper_ids": None,
+        "retry_count": 0,
+        "needs_retry": False,
+    }
+
+    async def generate():
+        start = time.perf_counter()
+        relevant_paper_ids = []
+        question_type = None
+
+        async for event in app.state.graph.astream_events(input_state, version="v2"):
+            if event["event"] == "on_chat_model_stream":
+                if event.get("metadata", {}).get("langgraph_node") == "generate":
+                    token = event["data"]["chunk"].content
+                    if token:
+                        yield f"data: {json.dumps({'type': 'token', 'token': token})}\n\n"
+            elif event["event"] == "on_chain_end" and event["name"] == "LangGraph":
+                output = event["data"].get("output", {})
+                question_type = output.get("question_type")
+                relevant_paper_ids = output.get("relevant_paper_ids") or []
+
+        latency = int((time.perf_counter() - start) * 1000)
+        qt = getattr(question_type, "value", question_type) or "factual"
+        yield f"data: {json.dumps({'type': 'done', 'question_type': qt, 'retrieved_arxiv_ids': relevant_paper_ids, 'latency': latency})}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")

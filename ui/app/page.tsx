@@ -76,6 +76,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [streamingAnswer, setStreamingAnswer] = useState<string>("");
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -88,9 +89,29 @@ export default function Home() {
     setError(null);
     setLoading(true);
     setPendingQuestion(question);
+    setStreamingAnswer("");
     try {
-      const response: AskResponse = await api.ask(question);
-      setMessages((prev) => [...prev, { id: Date.now(), question, response }]);
+      let fullAnswer = "";
+
+      for await (const event of api.askStream(question)) {
+        if (event.type === "token") {
+          fullAnswer += event.token;
+          setStreamingAnswer(fullAnswer); // triggers a re-render per token
+        } else if (event.type === "done") {
+          const response: AskResponse = {
+            question,
+            answer: fullAnswer,
+            question_type: event.question_type,
+            retrieved_arxiv_ids: event.retrieved_arxiv_ids,
+            latency: event.latency,
+          };
+          setMessages((prev) => [
+            ...prev,
+            { id: Date.now(), question, response },
+          ]);
+          setStreamingAnswer("");
+        }
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Request failed.");
     } finally {
@@ -134,23 +155,25 @@ export default function Home() {
                 <div>
                   {messages.length > 0 && <Separator className="mb-10" />}
                   <div className="space-y-5">
+                    {/* question header — same as before */}
                     <div className="flex items-start gap-3">
-                      <div
-                        className="flex-none mt-0.5 size-5 flex items-center justify-center shrink-0"
-                        style={{ backgroundColor: "#AEB5FF" }}
-                      >
-                        <span
-                          className="text-[9px] font-bold leading-none"
-                          style={{ color: "#2e32a6" }}
-                        >
-                          Q
-                        </span>
-                      </div>
-                      <p className="text-lg font-semibold leading-6 tracking-[-0.01em]">
-                        {pendingQuestion}
-                      </p>
+                      ...
+                      <p className="text-lg font-semibold">{pendingQuestion}</p>
                     </div>
-                    <LoadingBlock />
+
+                    {/* streaming answer or loading dots */}
+                    {streamingAnswer ? (
+                      <div className="ml-8 prose prose-sm prose-gray ...">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm, remarkMath]}
+                          rehypePlugins={[rehypeKatex]}
+                        >
+                          {streamingAnswer}
+                        </ReactMarkdown>
+                      </div>
+                    ) : (
+                      <LoadingBlock />
+                    )}
                   </div>
                 </div>
               )}

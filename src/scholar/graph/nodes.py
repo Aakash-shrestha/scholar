@@ -178,7 +178,7 @@ def generate_node(state: ScholarState) -> dict[str, Any]:
     else:
         docs = state["retrieved_docs"]
 
-    model = get_chat_model(pro=False, fast=True)
+    model = get_chat_model(pro=False, fast=True, streaming=True)
 
     rag_chain = build_rag_chain_from_docs(docs, model)
     answer = rag_chain.invoke(state["question"])

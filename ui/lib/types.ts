@@ -37,3 +37,17 @@ export interface IngestRefResponse {
   skipped: string[];
   total_found: number;
 }
+
+export type StreamTokenEvent = {
+  type: "token";
+  token: string;
+};
+
+export type StreamDoneEvent = {
+  type: "done";
+  question_type: string;
+  retrieved_arxiv_ids: string[];
+  latency: number;
+};
+
+export type StreamEvent = StreamTokenEvent | StreamDoneEvent;
