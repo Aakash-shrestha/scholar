@@ -18,13 +18,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
-
-type Message = {
-  id: number;
-  question: string;
-  pinnedPapers: Paper[];
-  response: AskResponse;
-};
+import { useChatHistory, type Message } from "@/lib/chat-context";
 
 const TYPE_META: Record<
   string,
@@ -76,7 +70,7 @@ const SUGGESTIONS: { text: string; bg: string; border: string }[] = [
 const DOT_COLORS = ["#95C8F3", "#DEACF9", "#7DE198"];
 
 export default function Home() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const { messages, setMessages } = useChatHistory();
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
