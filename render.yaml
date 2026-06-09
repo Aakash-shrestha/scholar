@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: scholar-api
+    runtime: python
+    region: oregon
+    buildCommand: pip install uv && uv sync --frozen
+    startCommand: uv run uvicorn scholar.api.app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
