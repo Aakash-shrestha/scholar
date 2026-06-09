@@ -35,6 +35,7 @@ from scholar.corpus.repository import CitationRepository, CorpusRepository, Refe
 from scholar.graph.graph import create_graph
 from scholar.ingestion.arxiv_fetch import search_arxiv_by_title
 from scholar.ingestion.ingest import ingest_paper, ingest_ref_paper
+from scholar.models import get_chat_model
 from scholar.retrieval.vectorstore import get_embeddings
 
 
@@ -80,6 +81,34 @@ def list_papers():
         )
         for paper in papers
     ]
+
+
+@app.get("/suggestions", response_model=list[str])
+def get_suggestions():
+    papers = app.state.repo.list_all()
+    if not papers:
+        return []
+
+    paper_list = "\n".join(f"- {p.title} ({p.year})" for p in papers[:10])
+    prompt = (
+        f"A researcher has these papers in their library:\n{paper_list}\n\n"
+        "Generate exactly 4 short, specific research questions they might want to ask. "
+        "Cover different angles: a concept definition, a methodology detail, a comparison, and a broader implication. "
+        "Each question must be under 12 words. "
+        "Return ONLY the 4 questions, one per line, no numbering, no bullets, no extra text."
+    )
+    from langchain_core.messages import HumanMessage
+
+    model = get_chat_model(pro=False, fast=True)
+    response = model.invoke([HumanMessage(content=prompt)])
+    raw = response.content if hasattr(response, "content") else str(response)
+
+    questions = []
+    for line in raw.strip().split("\n"):
+        clean = re.sub(r"^[\d\.\-\*\)\s]+", "", line).strip()
+        if clean:
+            questions.append(clean)
+    return questions[:4]
 
 
 @app.post("/papers", response_model=PaperResponse)
@@ -185,6 +214,7 @@ def ask_question(request: AskRequest):
             "relevant_paper_ids": request.paper_ids or None,
             "retry_count": 0,
             "needs_retry": False,
+            "history": [{"question": h.question, "answer": h.answer} for h in request.history],
         }
     )
     latency_ms = int((time.perf_counter() - start) * 1000)
@@ -213,6 +243,7 @@ async def ask_stream(request: AskRequest):
         "relevant_paper_ids": request.paper_ids or None,
         "retry_count": 0,
         "needs_retry": False,
+        "history": [{"question": h.question, "answer": h.answer} for h in request.history],
     }
 
     async def generate():

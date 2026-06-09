@@ -5,6 +5,11 @@ from langchain_core.documents import Document
 from scholar.evaluation.schema import QuestionType
 
 
+class HistoryTurn(TypedDict):
+    question: str
+    answer: str
+
+
 class ScholarState(TypedDict):
     question: str
     question_type: QuestionType | None
@@ -15,3 +20,4 @@ class ScholarState(TypedDict):
     relevant_paper_ids: list[str] | None
     retry_count: int
     needs_retry: bool
+    history: list[HistoryTurn]

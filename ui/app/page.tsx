@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, FormEvent, KeyboardEvent, ChangeEvent } from "react";
-import { ArrowUp, Clock, FileText, X } from "lucide-react";
+import { ArrowUp, Clock, FileText, Square, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -19,6 +19,7 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { useChatHistory, type Message } from "@/lib/chat-context";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const TYPE_META: Record<
   string,
@@ -56,16 +57,7 @@ const TYPE_META: Record<
   },
 };
 
-const SUGGESTIONS: { text: string; bg: string; border: string }[] = [
-  { text: "What is multi-head attention?", bg: "#95C8F3", border: "#75b2e6" },
-  { text: "How does RLHF work?", bg: "#7DE198", border: "#5acc7c" },
-  {
-    text: "Explain the transformer architecture.",
-    bg: "#AEB5FF",
-    border: "#9099f5",
-  },
-  { text: "What is contrastive learning?", bg: "#FFDC74", border: "#f0c640" },
-];
+type SuggestionItem = { text: string };
 
 const DOT_COLORS = ["#95C8F3", "#DEACF9", "#7DE198"];
 
@@ -84,6 +76,11 @@ export default function Home() {
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Dynamic suggestions state
+  const [suggestions, setSuggestions] = useState<SuggestionItem[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(true);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -91,6 +88,13 @@ export default function Home() {
 
   useEffect(() => {
     api.getPapers().then(setAllPapers).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    api.getSuggestions()
+      .then((qs) => setSuggestions(qs.map((text) => ({ text }))))
+      .catch(() => {})
+      .finally(() => setSuggestionsLoading(false));
   }, []);
 
   // Papers matching the current @ query, excluding already-pinned ones
@@ -135,6 +139,10 @@ export default function Home() {
     setPinnedPapers((prev) => prev.filter((p) => p.arxiv_id !== arxivId));
   }
 
+  function handleStop() {
+    abortRef.current?.abort();
+  }
+
   async function submit() {
     const question = input.trim();
     if (!question || loading) return;
@@ -143,6 +151,14 @@ export default function Home() {
       ? pinnedPapers.map((p) => p.arxiv_id)
       : undefined;
     const savedPinned = [...pinnedPapers];
+
+    // Send the last 5 turns as context — enough for coherent follow-ups without bloating the prompt
+    const history = messages
+      .slice(-5)
+      .map((m) => ({ question: m.question, answer: m.response.answer }));
+
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     setInput("");
     setPinnedPapers([]);
@@ -155,7 +171,7 @@ export default function Home() {
     try {
       let fullAnswer = "";
 
-      for await (const event of api.askStream(question, paperIds)) {
+      for await (const event of api.askStream(question, paperIds, controller.signal, history)) {
         if (event.type === "token") {
           fullAnswer += event.token;
           setStreamingAnswer(fullAnswer);
@@ -175,8 +191,31 @@ export default function Home() {
         }
       }
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Request failed.");
+      if (e instanceof DOMException && e.name === "AbortError") {
+        // User stopped the stream — commit whatever was generated so far
+        if (streamingAnswer) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: Date.now(),
+              question,
+              pinnedPapers: savedPinned,
+              response: {
+                question,
+                answer: streamingAnswer,
+                question_type: "factual",
+                retrieved_papers: [],
+                latency: 0,
+              },
+            },
+          ]);
+        }
+        setStreamingAnswer("");
+      } else {
+        setError(e instanceof Error ? e.message : "Request failed.");
+      }
     } finally {
+      abortRef.current = null;
       setLoading(false);
       setPendingQuestion(null);
     }
@@ -225,7 +264,11 @@ export default function Home() {
       <main className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto px-8 py-10">
           {!hasContent ? (
-            <EmptyState onSuggest={setInput} />
+            <EmptyState
+              onSuggest={setInput}
+              suggestions={suggestions}
+              loading={suggestionsLoading}
+            />
           ) : (
             <div className="space-y-10">
               {messages.map((msg, i) => (
@@ -339,14 +382,25 @@ export default function Home() {
                   className="flex-1 min-h-6 border-0 bg-transparent p-0 shadow-none focus-visible:ring-0 rounded-none text-sm resize-none leading-6"
                 />
               </div>
-              <Button
-                type="submit"
-                size="icon-sm"
-                disabled={!input.trim() || loading}
-                className="flex-none mb-0.5"
-              >
-                <ArrowUp className="size-3.5" />
-              </Button>
+              {loading ? (
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  onClick={handleStop}
+                  className="flex-none mb-0.5"
+                >
+                  <Square className="size-3 fill-current" />
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  size="icon-sm"
+                  disabled={!input.trim()}
+                  className="flex-none mb-0.5"
+                >
+                  <ArrowUp className="size-3.5" />
+                </Button>
+              )}
             </div>
           </div>
           <p className="text-[11px] text-muted-foreground text-center font-normal">
@@ -484,32 +538,83 @@ function CitationCard({ paper }: { paper: RetrievedPaper }) {
   );
 }
 
-function EmptyState({ onSuggest }: { onSuggest: (q: string) => void }) {
+function EmptyState({
+  onSuggest,
+  suggestions,
+  loading,
+}: {
+  onSuggest: (q: string) => void;
+  suggestions: SuggestionItem[];
+  loading: boolean;
+}) {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[52vh] gap-8 text-center">
+    <div className="flex flex-col items-center justify-center min-h-[52vh] gap-10 text-center">
+      <style>{`
+        @keyframes _fadeSlideUp {
+          from { opacity: 0; transform: translateY(8px); }
+          to   { opacity: 1; transform: translateY(0);   }
+        }
+      `}</style>
+
       <div className="space-y-1.5">
+        <p className="text-[11px] font-mono font-medium uppercase tracking-[0.18em] text-muted-foreground/60">
+          Suggested Inquiries
+        </p>
         <p className="text-base font-semibold tracking-[-0.02em]">
           What would you like to explore?
         </p>
-        <p className="text-sm text-muted-foreground font-normal">
-          Ask questions across your ingested research papers.
-        </p>
       </div>
-      <div className="w-full max-w-sm space-y-2">
-        {SUGGESTIONS.map((s) => (
-          <button
-            key={s.text}
-            onClick={() => onSuggest(s.text)}
-            className="w-full text-left text-sm border px-4 py-2.5 transition-all duration-100 cursor-pointer font-normal hover:opacity-80"
-            style={{
-              backgroundColor: s.bg + "33",
-              borderColor: s.border + "88",
-              color: "inherit",
-            }}
-          >
-            {s.text}
-          </button>
-        ))}
+
+      <div className="w-full max-w-md">
+        {loading ? (
+          <div className="divide-y divide-border">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="flex items-center gap-3.5 py-5">
+                <Skeleton className="h-3 w-6 shrink-0" />
+                <Skeleton className="h-4 w-full" />
+              </div>
+            ))}
+          </div>
+        ) : suggestions.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Ingest papers from the{" "}
+            <a
+              href="/papers"
+              className="underline underline-offset-2 hover:text-foreground transition-colors"
+            >
+              Research Library
+            </a>{" "}
+            to see suggested questions.
+          </p>
+        ) : (
+          <div className="divide-y divide-border text-left">
+            {suggestions.map((s, i) => (
+              <button
+                key={s.text}
+                onClick={() => onSuggest(s.text)}
+                className="group relative w-full flex items-start gap-4 py-5 cursor-pointer"
+                style={{
+                  opacity: 0,
+                  animation: `_fadeSlideUp 0.28s ease forwards`,
+                  animationDelay: `${i * 70}ms`,
+                }}
+              >
+                {/* Bibliography-style counter */}
+                <span className="font-mono text-[11px] text-muted-foreground/40 shrink-0 mt-0.5 tabular-nums select-none group-hover:text-muted-foreground/70 transition-colors duration-150">
+                  {String(i + 1).padStart(2, "0")}.
+                </span>
+
+                {/* Question text */}
+                <span className="text-sm text-foreground/70 group-hover:text-foreground leading-snug transition-colors duration-150">
+                  {s.text}
+                </span>
+
+                {/* Underline that draws left→right on hover */}
+                <span className="pointer-events-none absolute bottom-0 left-0 h-px w-0 bg-foreground/20 transition-[width] duration-300 ease-out group-hover:w-full" />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

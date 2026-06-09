@@ -60,9 +60,15 @@ class GraphSchema(BaseModel):
 
 
 # for asking questions
+class HistoryItem(BaseModel):
+    question: str
+    answer: str
+
+
 class AskRequest(BaseModel):
     question: str = Field(description="The question to ask about the paper")
     paper_ids: list[str] | None = None
+    history: list[HistoryItem] = []
 
 
 class AskResponse(BaseModel):

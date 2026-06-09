@@ -58,6 +58,11 @@ export type StreamDoneEvent = {
 
 export type StreamEvent = StreamTokenEvent | StreamDoneEvent;
 
+export interface HistoryItem {
+  question: string;
+  answer: string;
+}
+
 export interface ReferenceType {
   title: string;
   arxiv_id: string;

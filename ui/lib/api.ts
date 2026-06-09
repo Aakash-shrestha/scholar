@@ -1,4 +1,4 @@
-import type { StreamEvent } from "./types";
+import type { HistoryItem, StreamEvent } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -46,6 +46,9 @@ export const api = {
       }
     }),
 
+  getSuggestions: (): Promise<string[]> =>
+    fetch(`${API_BASE}/suggestions`, { headers: HEADERS }).then(parseResponse),
+
   getGraph: () =>
     fetch(`${API_BASE}/graph`, { headers: HEADERS }).then(parseResponse),
 
@@ -75,11 +78,14 @@ export const api = {
   async *askStream(
     question: string,
     paperIds?: string[],
+    signal?: AbortSignal,
+    history?: HistoryItem[],
   ): AsyncGenerator<StreamEvent> {
     const res = await fetch(`${API_BASE}/ask/stream`, {
       method: "POST",
       headers: HEADERS,
-      body: JSON.stringify({ question, paper_ids: paperIds }),
+      body: JSON.stringify({ question, paper_ids: paperIds, history: history ?? [] }),
+      signal,
     });
 
     if (!res.ok) {

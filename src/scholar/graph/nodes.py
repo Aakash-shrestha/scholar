@@ -6,15 +6,16 @@ from typing import Any, cast
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from pydantic import BaseModel
 
 from scholar.evaluation.schema import QuestionType
 from scholar.graph.state import ScholarState
 from scholar.models import get_chat_model
 from scholar.retrieval.hybrid import get_hybrid_retriever
-from scholar.retrieval.rag import build_rag_chain_from_docs
+from scholar.retrieval.rag import build_rag_chain_from_docs, format_docs
 
 
 class Classification(BaseModel):
@@ -175,16 +176,48 @@ def critic_node(state: ScholarState) -> dict[str, Any]:
 
 
 def generate_node(state: ScholarState) -> dict[str, Any]:
-    docs: list[Document] = []
-
-    if state["sub_questions_docs"]:
-        docs = state["sub_questions_docs"]
-    else:
-        docs = state["retrieved_docs"]
+    docs = state["sub_questions_docs"] if state["sub_questions_docs"] else state["retrieved_docs"]
+    history = state.get("history", [])
 
     model = get_chat_model(pro=False, fast=True, streaming=True)
 
-    rag_chain = build_rag_chain_from_docs(docs, model)
-    answer = rag_chain.invoke(state["question"])
+    # Convert prior turns into LangChain message objects for the prompt
+    history_messages = []
+    for turn in history:
+        history_messages.append(HumanMessage(content=turn["question"]))
+        history_messages.append(AIMessage(content=turn["answer"]))
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                dedent("""
+            You are an expert research assistant. Answer the query using only the provided context.
+            Cite every fact with its source label. If the context lacks sufficient information, say so explicitly.
+            If there is prior conversation, use it to understand what the user is referring to, \
+but still ground your answer in the context below.
+
+            Formatting rules:
+            - Use $...$ for inline math expressions (e.g. $\\sqrt{{d_k}}$).
+            - Use $$...$$ on its own line for display/block equations.
+            - Never use plain text or code blocks for mathematical notation.
+
+            Context:
+            {context}
+        """).strip(),
+            ),
+            MessagesPlaceholder(variable_name="history", optional=True),
+            ("human", "{question}"),
+        ]
+    )
+
+    chain = prompt | model | StrOutputParser()
+    answer = chain.invoke(
+        {
+            "context": format_docs(docs),
+            "history": history_messages,
+            "question": state["question"],
+        }
+    )
 
     return {"generated_answer": answer}
