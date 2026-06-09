@@ -16,7 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import { ChevronDown, ChevronUp, ExternalLink, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Papers() {
@@ -25,6 +25,7 @@ export default function Papers() {
   const [loading, setLoading] = useState(true);
   const [ingesting, setIngesting] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   useEffect(() => {
     api.getPapers().then((data) => {
@@ -45,6 +46,22 @@ export default function Papers() {
       toast.error(e instanceof Error ? e.message : "Ingest failed.", { id: toastId });
     } finally {
       setIngesting(false);
+    }
+  }
+
+  async function handleDelete(e: React.MouseEvent, arxivId: string) {
+    e.stopPropagation();
+    if (!confirm("Remove this paper from your library?")) return;
+
+    setDeleting(arxivId);
+    try {
+      await api.delete(arxivId);
+      setPapers((prev) => prev.filter((p) => p.arxiv_id !== arxivId));
+      toast.success("Paper removed from library.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Delete failed.");
+    } finally {
+      setDeleting(null);
     }
   }
 
@@ -105,11 +122,12 @@ export default function Papers() {
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-muted/80 backdrop-blur-sm">
                 <TableRow className="hover:bg-transparent border-b border-border">
-                  <TableHead className="w-[42%] pl-4">Title</TableHead>
-                  <TableHead className="w-[28%]">Citation</TableHead>
+                  <TableHead className="w-[40%] pl-4">Title</TableHead>
+                  <TableHead className="w-[26%]">Citation</TableHead>
                   <TableHead className="w-[7%]">Year</TableHead>
-                  <TableHead className="w-[13%]">arXiv ID</TableHead>
+                  <TableHead className="w-[12%]">arXiv ID</TableHead>
                   <TableHead className="w-[9%]">Ingested</TableHead>
+                  <TableHead className="w-8" />
                   <TableHead className="w-8" />
                 </TableRow>
               </TableHeader>
@@ -158,6 +176,17 @@ export default function Papers() {
                             day: "numeric",
                           })}
                         </TableCell>
+                        <TableCell className="py-3 align-top" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                            disabled={deleting === paper.arxiv_id}
+                            onClick={(e) => handleDelete(e, paper.arxiv_id)}
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        </TableCell>
                         <TableCell className="py-3 align-top pr-3">
                           {isExpanded ? (
                             <ChevronUp className="size-4 text-muted-foreground group-hover:text-foreground transition-colors" />
@@ -169,7 +198,7 @@ export default function Papers() {
                       {isExpanded && (
                         <TableRow className="bg-muted/30 hover:bg-muted/30">
                           <TableCell
-                            colSpan={6}
+                            colSpan={7}
                             className="!whitespace-normal break-words px-6 py-4 align-top"
                           >
                             <p className="text-sm text-muted-foreground leading-relaxed w-full text-justify">

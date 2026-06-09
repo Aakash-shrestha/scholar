@@ -35,6 +35,16 @@ export const api = {
       headers: HEADERS,
       body: JSON.stringify({ question }),
     }).then(parseResponse),
+  delete: (arxiv_id: string) =>
+    fetch(`${API_BASE}/papers/${arxiv_id}`, {
+      method: "DELETE",
+      headers: HEADERS,
+    }).then(async (r) => {
+      if (!r.ok) {
+        const data = await r.json();
+        throw new Error(data.detail ?? `Request failed (${r.status})`);
+      }
+    }),
 
   getGraph: () =>
     fetch(`${API_BASE}/graph`, { headers: HEADERS }).then(parseResponse),
@@ -51,11 +61,14 @@ export const api = {
       headers: HEADERS,
     }).then(parseResponse),
 
-  async *askStream(question: string): AsyncGenerator<StreamEvent> {
+  async *askStream(
+    question: string,
+    paperIds?: string[],
+  ): AsyncGenerator<StreamEvent> {
     const res = await fetch(`${API_BASE}/ask/stream`, {
       method: "POST",
       headers: HEADERS,
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ question, paper_ids: paperIds }),
     });
 
     if (!res.ok) {

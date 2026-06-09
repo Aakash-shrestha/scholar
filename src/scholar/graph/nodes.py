@@ -63,10 +63,15 @@ def find_relevant_paper_node(
     embeddings: Embeddings,
     abstracts_store: Chroma | None = None,
 ) -> dict[str, Any]:
+    if state.get("relevant_paper_ids"):
+        return {"relevant_paper_ids": state["relevant_paper_ids"]}
+
     if state["question_type"] in (QuestionType.DEFINITIONAL, QuestionType.SYNTHESIS):
         return {"relevant_paper_ids": list(stores.keys())}
+
     if abstracts_store is None:
         return {"relevant_paper_ids": list(stores.keys())}
+
     results = abstracts_store.similarity_search(state["question"], k=3)
     arxiv_ids = [doc.metadata["arxiv_id"] for doc in results]
     return {"relevant_paper_ids": arxiv_ids}

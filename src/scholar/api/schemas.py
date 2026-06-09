@@ -62,6 +62,7 @@ class GraphSchema(BaseModel):
 # for asking questions
 class AskRequest(BaseModel):
     question: str = Field(description="The question to ask about the paper")
+    paper_ids: list[str] | None = None
 
 
 class AskResponse(BaseModel):

@@ -2,9 +2,9 @@ import gc
 import json
 import re
 import resource
+import threading
 import time
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 # Raise the soft FD limit to avoid "Too many open files" with many papers
 try:
@@ -172,7 +172,7 @@ def ask_question(request: AskRequest):
             "sub_questions": None,
             "sub_questions_docs": None,
             "generated_answer": None,
-            "relevant_paper_ids": None,
+            "relevant_paper_ids": request.paper_ids or None,
             "retry_count": 0,
             "needs_retry": False,
         }
@@ -200,7 +200,7 @@ async def ask_stream(request: AskRequest):
         "sub_questions": None,
         "sub_questions_docs": None,
         "generated_answer": None,
-        "relevant_paper_ids": None,
+        "relevant_paper_ids": request.paper_ids or None,
         "retry_count": 0,
         "needs_retry": False,
     }
@@ -263,3 +263,23 @@ def get_paper_references(arxiv_id: str):
         result.append(ReferenceItem(title=ref.title, arxiv_id=ref_id, is_ingested=is_ingested))
 
     return result
+
+
+@app.delete("/papers/{arxiv_id}", status_code=204)
+def delete_paper(arxiv_id: str):
+    deleted = app.state.repo.delete(arxiv_id, app.state.embeddings)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Paper {arxiv_id} not found")
+
+    # rebuild the graph without the deelete paper
+    gc.collect()
+
+    def rebuild():
+        try:
+            app.state.graph = create_graph()
+            print("[scholar] Graph rebuilt after deletion.")
+        except FileNotFoundError:
+            app.state.graph = None
+
+    threading.Thread(target=rebuild, daemon=True).start()
+    return Response(status_code=204)

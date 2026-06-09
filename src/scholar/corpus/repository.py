@@ -2,6 +2,7 @@ import shutil
 from pathlib import Path
 
 from langchain_chroma import Chroma
+from langchain_core.embeddings import Embeddings
 from sqlalchemy import delete as sql_delete
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
@@ -39,7 +40,7 @@ class CorpusRepository:
             stmt = select(Paper).order_by(Paper.ingested_at.desc())
             return list(session.scalars(stmt))
 
-    def delete(self, arxiv_id: str, embeddings) -> bool:
+    def delete(self, arxiv_id: str, embeddings: Embeddings) -> bool:
         """
         Deletes a paper from the database by its arxiv_id. Returns True if deleted, False if not found.
         Also deletes the corresponding vector from the vector store.
@@ -62,10 +63,10 @@ class CorpusRepository:
             session.execute(sql_delete(Reference).where(Reference.source_arxiv_id == arxiv_id))
 
             # delete the paper row iteslf
-            session.delete(paper)
+            session.delete(paper)  # deletes the ORM object itself
             session.commit()
 
-            if persist_dir.exits():
+            if persist_dir.exists():
                 shutil.rmtree(persist_dir)
 
             # delete the abstract from the shared abstract chroma vectorstore
@@ -73,9 +74,9 @@ class CorpusRepository:
             if abstracts_dir.exists():
                 collection = Chroma(
                     persist_directory=str(abstracts_dir),
-                    embeddings=embeddings,
+                    embedding_function=embeddings,
                 )
-                results = collection.get(where={"arxiv_id" == arxiv_id})
+                results = collection.get(where={"arxiv_id": arxiv_id})
                 if results["ids"]:
                     collection.delete(ids=results["ids"])
             return True

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect, FormEvent, KeyboardEvent } from "react";
-import { ArrowUp, Clock, FileText } from "lucide-react";
+import { useState, useRef, useEffect, FormEvent, KeyboardEvent, ChangeEvent } from "react";
+import { ArrowUp, Clock, FileText, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
-import type { AskResponse, RetrievedPaper } from "@/lib/types";
+import type { AskResponse, Paper, RetrievedPaper } from "@/lib/types";
 import {
   HoverCard,
   HoverCardContent,
@@ -22,6 +22,7 @@ import {
 type Message = {
   id: number;
   question: string;
+  pinnedPapers: Paper[];
   response: AskResponse;
 };
 
@@ -83,25 +84,87 @@ export default function Home() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [streamingAnswer, setStreamingAnswer] = useState<string>("");
 
+  // @ mention state
+  const [allPapers, setAllPapers] = useState<Paper[]>([]);
+  const [pinnedPapers, setPinnedPapers] = useState<Paper[]>([]);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, pendingQuestion]);
 
+  useEffect(() => {
+    api.getPapers().then(setAllPapers).catch(() => {});
+  }, []);
+
+  // Papers matching the current @ query, excluding already-pinned ones
+  const mentionResults = mentionQuery === null
+    ? []
+    : allPapers
+        .filter((p) => !pinnedPapers.some((pp) => pp.arxiv_id === p.arxiv_id))
+        .filter(
+          (p) =>
+            mentionQuery === "" ||
+            p.title.toLowerCase().includes(mentionQuery.toLowerCase()) ||
+            p.arxiv_id.includes(mentionQuery),
+        )
+        .slice(0, 6);
+
+  function handleInputChange(e: ChangeEvent<HTMLTextAreaElement>) {
+    const value = e.target.value;
+    setInput(value);
+
+    // Detect an @ that hasn't been closed by a space yet
+    const cursor = e.target.selectionStart ?? value.length;
+    const textUpToCursor = value.slice(0, cursor);
+    const match = textUpToCursor.match(/@(\w*)$/);
+    if (match) {
+      setMentionQuery(match[1]);
+      setMentionIndex(0);
+    } else {
+      setMentionQuery(null);
+    }
+  }
+
+  function selectMention(paper: Paper) {
+    // Strip the @query text that triggered the popup, then add the paper chip
+    setInput((prev) => prev.replace(/@\w*$/, "").trimEnd());
+    setPinnedPapers((prev) => [...prev, paper]);
+    setMentionQuery(null);
+    setMentionIndex(0);
+    textareaRef.current?.focus();
+  }
+
+  function removePinned(arxivId: string) {
+    setPinnedPapers((prev) => prev.filter((p) => p.arxiv_id !== arxivId));
+  }
+
   async function submit() {
     const question = input.trim();
     if (!question || loading) return;
+
+    const paperIds = pinnedPapers.length > 0
+      ? pinnedPapers.map((p) => p.arxiv_id)
+      : undefined;
+    const savedPinned = [...pinnedPapers];
+
     setInput("");
+    setPinnedPapers([]);
+    setMentionQuery(null);
     setError(null);
     setLoading(true);
     setPendingQuestion(question);
     setStreamingAnswer("");
+
     try {
       let fullAnswer = "";
 
-      for await (const event of api.askStream(question)) {
+      for await (const event of api.askStream(question, paperIds)) {
         if (event.type === "token") {
           fullAnswer += event.token;
-          setStreamingAnswer(fullAnswer); // triggers a re-render per token
+          setStreamingAnswer(fullAnswer);
         } else if (event.type === "done") {
           const response: AskResponse = {
             question,
@@ -112,7 +175,7 @@ export default function Home() {
           };
           setMessages((prev) => [
             ...prev,
-            { id: Date.now(), question, response },
+            { id: Date.now(), question, pinnedPapers: savedPinned, response },
           ]);
           setStreamingAnswer("");
         }
@@ -131,6 +194,29 @@ export default function Home() {
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    // Intercept keyboard events when the mention popup is open
+    if (mentionQuery !== null && mentionResults.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setMentionIndex((i) => Math.min(i + 1, mentionResults.length - 1));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setMentionIndex((i) => Math.max(i - 1, 0));
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        selectMention(mentionResults[mentionIndex]);
+        return;
+      }
+      if (e.key === "Escape") {
+        setMentionQuery(null);
+        return;
+      }
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       submit();
@@ -160,13 +246,11 @@ export default function Home() {
                 <div>
                   {messages.length > 0 && <Separator className="mb-10" />}
                   <div className="space-y-5">
-                    {/* question header — same as before */}
                     <div className="flex items-start gap-3">
                       ...
                       <p className="text-lg font-semibold">{pendingQuestion}</p>
                     </div>
 
-                    {/* streaming answer or loading dots */}
                     {streamingAnswer ? (
                       <div className="ml-8 prose prose-sm prose-gray ...">
                         <ReactMarkdown
@@ -195,27 +279,85 @@ export default function Home() {
       {/* Input bar */}
       <footer className="flex-none border-t border-border bg-background px-8 py-4">
         <form onSubmit={handleSubmit} className="max-w-4xl mx-auto space-y-2.5">
-          <div className="flex items-end gap-2 border border-input bg-muted/40 px-3.5 py-2.5 focus-within:border-ring focus-within:bg-background transition-all duration-150">
-            <Textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask a research question…"
-              rows={1}
-              className="flex-1 min-h-6 border-0 bg-transparent p-0 shadow-none focus-visible:ring-0 rounded-none text-sm resize-none leading-6"
-            />
-            <Button
-              type="submit"
-              size="icon-sm"
-              disabled={!input.trim() || loading}
-              className="flex-none mb-0.5"
-            >
-              <ArrowUp className="size-3.5" />
-            </Button>
+          {/* Wrapper is relative so the popup can anchor to it */}
+          <div className="relative">
+            {/* @ mention popup — floats above the input */}
+            {mentionQuery !== null && mentionResults.length > 0 && (
+              <div className="absolute bottom-full mb-1.5 left-0 right-0 border border-border bg-background shadow-lg z-50 overflow-hidden">
+                {mentionResults.map((p, i) => (
+                  <button
+                    key={p.arxiv_id}
+                    type="button"
+                    className={cn(
+                      "w-full text-left px-3 py-2.5 flex flex-col gap-0.5 transition-colors",
+                      i === mentionIndex ? "bg-muted" : "hover:bg-muted/50",
+                    )}
+                    // onMouseDown instead of onClick so the textarea doesn't lose focus
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      selectMention(p);
+                    }}
+                  >
+                    <span className="text-sm font-medium line-clamp-1">
+                      {p.title}
+                    </span>
+                    <span className="text-xs text-muted-foreground font-mono">
+                      {p.short_citation} · {p.arxiv_id}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-end gap-2 border border-input bg-muted/40 px-3.5 py-2.5 focus-within:border-ring focus-within:bg-background transition-all duration-150">
+              <div className="flex-1 flex flex-col gap-2 min-w-0">
+                {/* Pinned paper chips */}
+                {pinnedPapers.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {pinnedPapers.map((p) => (
+                      <span
+                        key={p.arxiv_id}
+                        className="inline-flex items-center gap-1 text-[11px] border border-border px-2 py-0.5 bg-muted/60"
+                      >
+                        <FileText className="size-3 shrink-0 text-muted-foreground" />
+                        <span className="max-w-[160px] truncate font-medium">
+                          {p.title}
+                        </span>
+                        <button
+                          type="button"
+                          className="ml-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                          onClick={() => removePinned(p.arxiv_id)}
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <Textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={handleInputChange}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Ask a research question… (type @ to pin papers)"
+                  rows={1}
+                  className="flex-1 min-h-6 border-0 bg-transparent p-0 shadow-none focus-visible:ring-0 rounded-none text-sm resize-none leading-6"
+                />
+              </div>
+              <Button
+                type="submit"
+                size="icon-sm"
+                disabled={!input.trim() || loading}
+                className="flex-none mb-0.5"
+              >
+                <ArrowUp className="size-3.5" />
+              </Button>
+            </div>
           </div>
           <p className="text-[11px] text-muted-foreground text-center font-normal">
             Answers are grounded in your ingested corpus · Shift+Enter for
-            newline
+            newline · type @ to pin specific papers
           </p>
         </form>
       </footer>
@@ -224,7 +366,7 @@ export default function Home() {
 }
 
 function MessageBlock({ message }: { message: Message }) {
-  const { question, response } = message;
+  const { question, pinnedPapers, response } = message;
   const meta = TYPE_META[response.question_type] ?? {
     label: response.question_type,
     bg: "#e5e7eb",
@@ -235,21 +377,38 @@ function MessageBlock({ message }: { message: Message }) {
   return (
     <div className="space-y-5">
       {/* Question */}
-      <div className="flex items-center gap-3">
-        <div
-          className="flex-none mt-0.5 size-8 p-0 flex items-center justify-center shrink-0"
-          style={{ backgroundColor: "#AEB5FF" }}
-        >
-          <span
-            className="text-[12px]  font-extrabold leading-none"
-            style={{ color: "#2e32a6" }}
+      <div className="space-y-2">
+        <div className="flex items-center gap-3">
+          <div
+            className="flex-none mt-0.5 size-8 p-0 flex items-center justify-center shrink-0"
+            style={{ backgroundColor: "#AEB5FF" }}
           >
-            Q
-          </span>
+            <span
+              className="text-[12px] font-extrabold leading-none"
+              style={{ color: "#2e32a6" }}
+            >
+              Q
+            </span>
+          </div>
+          <p className="text-lg font-semibold leading-6 tracking-[-0.01em]">
+            {question.charAt(0).toUpperCase() + question.slice(1)}
+          </p>
         </div>
-        <p className="text-lg font-semibold leading-6 tracking-[-0.01em]">
-          {question.charAt(0).toUpperCase() + question.slice(1)}
-        </p>
+
+        {/* Pinned paper chips (shown in the message history) */}
+        {pinnedPapers.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 ml-11">
+            {pinnedPapers.map((p) => (
+              <span
+                key={p.arxiv_id}
+                className="inline-flex items-center gap-1 text-[10px] border border-border px-1.5 py-0.5 bg-muted/40 text-muted-foreground font-mono"
+              >
+                <FileText className="size-2.5 shrink-0" />
+                {p.arxiv_id}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Answer */}
@@ -330,6 +489,7 @@ function CitationCard({ paper }: { paper: RetrievedPaper }) {
     </HoverCard>
   );
 }
+
 function EmptyState({ onSuggest }: { onSuggest: (q: string) => void }) {
   return (
     <div className="flex flex-col items-center justify-center min-h-[52vh] gap-8 text-center">
