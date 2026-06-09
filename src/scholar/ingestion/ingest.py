@@ -57,6 +57,8 @@ def ingest_paper(
     references: list[ExtractedReference] = extract_references(paper_path)
     for reference in references:
         clean_id = re.sub(r"v\d+$", "", reference.arxiv_id) if reference.arxiv_id else None
+        if clean_id and not re.match(r"^\d{4}\.\d{4,5}$", clean_id):
+            clean_id = None
         reference_repository.add(arxiv_id, reference.title, clean_id)
     corpus_repository.add(paper_record)
     paper_path.unlink()  # delete the downloaded pdf to save space
@@ -102,6 +104,9 @@ def ingest_ref_paper(
             ref_arxiv_id = result.arxiv_id
         else:
             ref_arxiv_id = re.sub(r"v\d+$", "", reference.arxiv_id)  # strip version from stored ID
+            if not re.match(r"^\d{4}\.\d{4,5}$", ref_arxiv_id):
+                skipped_papers.append(ref_arxiv_id)
+                continue  # old-format ID — skip, can't route
 
         if ref_arxiv_id in ingested_ids:
             citation_repository.add(arxiv_id, ref_arxiv_id)

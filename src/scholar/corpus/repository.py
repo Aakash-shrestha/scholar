@@ -1,7 +1,13 @@
+import shutil
+from pathlib import Path
+
+from langchain_chroma import Chroma
+from sqlalchemy import delete as sql_delete
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm.session import Session
 
+from scholar.config import settings
 from scholar.corpus.db import Citation, Paper, Reference
 
 
@@ -32,6 +38,47 @@ class CorpusRepository:
         with Session(self.engine) as session:
             stmt = select(Paper).order_by(Paper.ingested_at.desc())
             return list(session.scalars(stmt))
+
+    def delete(self, arxiv_id: str, embeddings) -> bool:
+        """
+        Deletes a paper from the database by its arxiv_id. Returns True if deleted, False if not found.
+        Also deletes the corresponding vector from the vector store.
+        """
+        with Session(self.engine) as session:
+            paper = session.get(Paper, arxiv_id)
+            if paper is None:
+                return False
+
+            persist_dir = Path(paper.persist_dir)
+
+            # delete the citation where the paper is source or target
+            session.execute(
+                sql_delete(Citation).where(
+                    (Citation.source_arxiv_id == arxiv_id) | (Citation.cited_arxiv_id == arxiv_id)
+                )
+            )
+
+            # delete all the references where the paper is the source
+            session.execute(sql_delete(Reference).where(Reference.source_arxiv_id == arxiv_id))
+
+            # delete the paper row iteslf
+            session.delete(paper)
+            session.commit()
+
+            if persist_dir.exits():
+                shutil.rmtree(persist_dir)
+
+            # delete the abstract from the shared abstract chroma vectorstore
+            abstracts_dir = settings.chroma_dir / "abstracts"
+            if abstracts_dir.exists():
+                collection = Chroma(
+                    persist_directory=str(abstracts_dir),
+                    embeddings=embeddings,
+                )
+                results = collection.get(where={"arxiv_id" == arxiv_id})
+                if results["ids"]:
+                    collection.delete(ids=results["ids"])
+            return True
 
 
 class CitationRepository:

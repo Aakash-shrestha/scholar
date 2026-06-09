@@ -255,6 +255,8 @@ def get_paper_references(arxiv_id: str):
                 continue  # not available in arxiv
             ref_id = found.arxiv_id
         ref_id = re.sub(r"v\d+$", "", ref_id)  # strip version suffix (e.g. 1412.6980v9 → 1412.6980)
+        if not re.match(r"^\d{4}\.\d{4,5}$", ref_id):
+            continue  # old-format ID (e.g. hep-ex/0612020) — skip, breaks URL routing
         if ref.arxiv_id != ref_id:
             app.state.ref_repo.update_arxiv_id(arxiv_id, ref.title, ref_id)
         is_ingested = app.state.repo.get(ref_id) is not None
