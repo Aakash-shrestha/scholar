@@ -42,6 +42,11 @@ export default function SinglePaper() {
         `Ingested ${data.ingest.length} new · skipped ${data.skipped.length} already known · ${data.total_found} total found.`,
         { id: toastId },
       );
+      // Re-fetch the refs list so is_ingested statuses reflect what was just ingested
+      if (showRefs) {
+        const updated = await api.getReferences(arxiv_id as string);
+        setRefs(updated);
+      }
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Ingest failed.", {
         id: toastId,
@@ -72,12 +77,18 @@ export default function SinglePaper() {
     }
   }
 
-  function handleRefIngested(ingestedId: string) {
+  async function handleRefIngested(ingestedId: string) {
     setRefs((prev) =>
       prev.map((r) =>
         r.arxiv_id === ingestedId ? { ...r, is_ingested: true } : r,
       ),
     );
+    // Create the citation edge so the graph connects this paper to its parent
+    try {
+      await api.addCitation(arxiv_id as string, ingestedId);
+    } catch {
+      // Non-fatal — paper is ingested, citation edge creation just failed
+    }
   }
 
   return (

@@ -61,6 +61,17 @@ export const api = {
       headers: HEADERS,
     }).then(parseResponse),
 
+  addCitation: (sourceId: string, citedId: string) =>
+    fetch(`${API_BASE}/papers/${sourceId}/citations/${citedId}`, {
+      method: "POST",
+      headers: HEADERS,
+    }).then(async (r) => {
+      if (!r.ok) {
+        const data = await r.json();
+        throw new Error(data.detail ?? `Request failed (${r.status})`);
+      }
+    }),
+
   async *askStream(
     question: string,
     paperIds?: string[],

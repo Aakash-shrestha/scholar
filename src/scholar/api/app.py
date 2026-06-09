@@ -121,6 +121,16 @@ def get_paper_by_id(arxiv_id: str):
     )
 
 
+@app.post("/papers/{source_id}/citations/{cited_id}", status_code=201)
+def add_citation(source_id: str, cited_id: str):
+    if app.state.repo.get(source_id) is None:
+        raise HTTPException(status_code=404, detail=f"Paper {source_id} not found")
+    if app.state.repo.get(cited_id) is None:
+        raise HTTPException(status_code=404, detail=f"Paper {cited_id} not found")
+    app.state.cite_repo.add(source_id, cited_id)
+    return Response(status_code=201)
+
+
 @app.post("/papers/{arxiv_id}/refs", response_model=IngestRefPaperResponse)
 def add_ref_paper(arxiv_id: str, request: IngestRefPaperRequest):
     if app.state.repo.get(arxiv_id) is None:
