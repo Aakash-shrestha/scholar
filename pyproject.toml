@@ -9,6 +9,10 @@ dependencies = [
     "langchain>=0.3.0",
     "langchain-core>=0.3.0",
     "langchain-community>=0.3.0",
+    "langchain-text-splitters>=0.3.0",
+    "langchain-classic>=0.1.0",
+    "httpx>=0.27.0",
+    "regex>=2024.0.0",
     # LLM providers — free tier focused
     "langchain-google-genai>=2.0.0",  # Gemini (free: 1500 req/day)
     "langchain-groq>=0.2.0",          # Llama via Groq (free: 30 req/min) — optional alternative
