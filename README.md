@@ -1,3 +1,12 @@
+---
+title: Scholar API
+emoji: 📚
+colorFrom: gray
+colorTo: gray
+sdk: docker
+pinned: false
+---
+
 # Scholar
 
 A research assistant for academic papers. Built with LangChain and evaluated with a custom LLM-as-judge benchmark.
