@@ -14,5 +14,5 @@ jobs:
 
       - name: Push to HuggingFace
         run: |
-          git remote add hf https://aakashshrestha:${{ secrets.HF_TOKEN}}@huggingface.co/spaces/aakashshrestha/scholar-api
+          git remote add hf https://aakashshrestha:${{ secrets.HF_TOKEN }}@huggingface.co/spaces/aakashshrestha/scholar-api
           git push hf main --force
