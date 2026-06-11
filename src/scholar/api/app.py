@@ -300,8 +300,10 @@ def get_paper_references(arxiv_id: str):
             continue  # old-format ID (e.g. hep-ex/0612020) — skip, breaks URL routing
         if ref.arxiv_id != ref_id:
             app.state.ref_repo.update_arxiv_id(arxiv_id, ref.title, ref_id)
-        is_ingested = app.state.repo.get(ref_id) is not None
-        result.append(ReferenceItem(title=ref.title, arxiv_id=ref_id, is_ingested=is_ingested))
+        ingested_paper = app.state.repo.get(ref_id)
+        is_ingested = ingested_paper is not None
+        title = ingested_paper.title if ingested_paper is not None else ref.title
+        result.append(ReferenceItem(title=title, arxiv_id=ref_id, is_ingested=is_ingested))
 
     return result
 
