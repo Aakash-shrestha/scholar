@@ -11,8 +11,6 @@ pinned: false
 
 A research assistant for academic papers. Built with LangChain and evaluated with a custom LLM-as-judge benchmark.
 
-> **Status:** Phase 3 of 6 complete. Retrieval pipeline is built, measured, and reproducible. Multi-agent features are in development. See the [roadmap](#roadmap).
-
 ## What it does
 
 Today, Scholar lets you build a small corpus of arXiv papers and ask grounded, cited questions about them:
@@ -27,7 +25,7 @@ The CLI exposes everything: `scholar ingest`, `scholar list`, `scholar ask`, `sc
 
 ## Live Demo
 Frontend: https://scholar-research.vercel.app
-Backend: Self-hosted (run locally with uvicorn)
+Backend: Self-hosted (run locally with uvicorn), now changed to huggingface spaces
 
 ## Why this exists
 
