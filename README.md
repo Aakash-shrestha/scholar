@@ -43,26 +43,61 @@ to measure quality at each stage.
 - **CLI:** Typer + Rich
 - **Observability:** LangSmith (free tier)
 
-## Quick start
+## Running locally
+
+Scholar has two parts: a **FastAPI backend** and a **Next.js frontend**. You need both running at the same time, plus ngrok if you want to connect a remotely hosted frontend to your local backend.
+
+### 1. Backend (FastAPI)
 
 ```bash
-# 1. Install uv if you haven't
+# Install uv if you haven't
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# 2. Clone and install
-git clone https://github.com/YOU/scholar
+# Clone and install dependencies
+git clone https://github.com/Aakash-shrestha/scholar
 cd scholar
 uv sync
 
-# 3. Set up your env (GROQ_API_KEY is required)
+# Copy and fill in your API keys
 cp .env.example .env
-# Get keys at:
-#   - https://console.groq.com/keys     (free, no card)
-#   - https://smith.langchain.com       (free, optional but recommended)
+# Required: GOOGLE_API_KEY  → https://aistudio.google.com/apikey (free)
+# Optional: GROQ_API_KEY    → https://console.groq.com/keys (free)
+# Optional: LANGSMITH_*     → https://smith.langchain.com (free, for tracing)
 
-# 4. Ingest a paper and ask it something
+# Start the backend server (runs on http://localhost:8000)
+uv run uvicorn scholar.api.app:app --reload
+```
+
+### 2. Expose backend via ngrok (optional, needed if frontend is hosted remotely)
+
+```bash
+# Install ngrok: https://ngrok.com/download
+ngrok http 8000
+# Copy the https://xxxx.ngrok-free.app URL — you'll need it for the frontend
+```
+
+### 3. Frontend (Next.js)
+
+```bash
+cd ui
+
+# Set the backend URL
+cp .env.example .env.local
+# Edit .env.local and set:
+# NEXT_PUBLIC_API_URL=http://localhost:8000        (if running frontend locally)
+# NEXT_PUBLIC_API_URL=https://xxxx.ngrok-free.app  (if using ngrok)
+
+# Install dependencies and start
+npm install
+npm run dev
+# Frontend runs on http://localhost:3000
+```
+
+### Quick start (CLI only, no frontend)
+
+```bash
 uv run scholar ingest arxiv:1706.03762
-uv run scholar ask "What is multi-head attention?" 
+uv run scholar ask "What is multi-head attention?"
 ```
 
 
